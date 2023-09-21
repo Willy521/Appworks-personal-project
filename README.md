@@ -10,5 +10,3 @@
    * construction_cost
 5. Crawl government social indicators
    * Taiwan's population
-
-(anue_news_data and house_price_file have uploaded to AWS S3)
