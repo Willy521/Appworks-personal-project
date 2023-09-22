@@ -68,7 +68,7 @@ def real_estate_crawler(year, season, s3_bucket):
 s3_bucket = 'appworks.personal.project'
 
 # Loop through years and seasons
-for year in range(112, 113):
+for year in range(105, 113):
     for season in range(1, 4):
         print(year, season)
         real_estate_crawler(year, season, s3_bucket)
