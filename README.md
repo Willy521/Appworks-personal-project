@@ -1,12 +1,10 @@
-# Feature_crawl
+# Feature_dashboard_design
 
-1. Crawl news
-   * housefun news of popularity
-   * Crawl anue news
-2. Fetch house price file
-3. Crawl government economic indicators
-   * cycle indicator
-   * gdp
-   * construction_cost
-5. Crawl government social indicators
-   * Taiwan's population
+1. Page 1: Taiwanese overall house price 
+2. Page 2: Trading hotspots
+3. Page 3: Impact factors
+
+
+
+
+
