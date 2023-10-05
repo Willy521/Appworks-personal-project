@@ -1,25 +1,26 @@
+# craw_anue.py
+
 import json
 import requests
 from bs4 import BeautifulSoup
 import boto3
 import os
+from dotenv import load_dotenv
 
 
-def upload_file_to_s3(file_name, bucket, object_name=None):
+# 上傳到S3
+def upload_file_to_s3(file_name, bucket):
     s3 = boto3.client('s3')
-
-    if object_name is None:
-        object_name = file_name
-
     try:
-        s3.upload_file(file_name, bucket, object_name)
+        s3.upload_file(file_name, bucket, file_name)  # 本地的文件路徑跟S3設為一樣
         return True
     except Exception as e:
         print(f"An error occurred: {e}")
         return False
 
 
-def fetch_cnyes_housenews():
+def main():
+    load_dotenv()
     base_url = 'https://news.cnyes.com'
     url = f'{base_url}/news/cat/tw_housenews'
     response = requests.get(url)
@@ -32,7 +33,6 @@ def fetch_cnyes_housenews():
     articles = soup.find_all('div', {'style': 'height:70px;'})
 
     news_data = []
-
     for i, article in enumerate(articles):
         title = article.find('h3')
         time = article.find('time')
@@ -60,25 +60,25 @@ def fetch_cnyes_housenews():
 
     print("-------------------------------------------------------------------------------------------------------")
 
-    json_file_path = 'crawl_to_s3/anue_news_data.json'
+    print(json.dumps(news_data, ensure_ascii=False, indent=4))
 
-    # 檢查目錄是否存在，如果不存在則創建
-    directory = os.path.dirname(json_file_path)
+    # Save as JSON file
+    # 在本地創建一個資料夾，將JSON file 存入資料夾並上傳到S3
+    directory = 'crawl_to_s3_file'
     if not os.path.exists(directory):
         os.makedirs(directory)
-
+    # 在資料夾內創建JSON
+    json_file_path = "crawl_to_s3_file/anue_news_data.json"
     with open(json_file_path, 'w', encoding='utf-8') as f:
         json.dump(news_data, f, ensure_ascii=False, indent=4)
 
-    # Upload JSON file to S3
-    if upload_file_to_s3(json_file_path, 'appworks.personal.project'):
+    # Upload to S3
+    bucket_name = 'appworks.personal.project'  # Replace with your bucket name
+    if upload_file_to_s3(json_file_path, bucket_name):
         print("JSON file successfully uploaded to S3.")
     else:
         print("Failed to upload JSON file to S3.")
 
-    # Pretty-print JSON data
-    print(json.dumps(news_data, ensure_ascii=False, indent=4))
-
 
 if __name__ == "__main__":
-    fetch_cnyes_housenews()
+    main()

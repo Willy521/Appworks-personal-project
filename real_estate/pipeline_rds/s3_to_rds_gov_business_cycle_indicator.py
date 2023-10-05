@@ -1,9 +1,11 @@
 # s3_to_rds_gov_economic_cycle_indicator
+
 import json
 import pymysql
 from decouple import config
 from dotenv import load_dotenv
 import boto3
+import os
 
 
 # 連接RDS DB
@@ -43,12 +45,16 @@ def main():
     load_dotenv()
     # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
-    object_key = 'crawl_to_s3/economic_business_cycle_data.json'
-    file_name = 'economic_business_cycle_data.json'
+    object_key = 'crawl_to_s3_file/business_cycle_data.json'  # S3文件的名字
+    file_name = 'download_from_s3_file/business_cycle_data.json'  # 本地保存的文件名
+
+    # 在本地創建一個資料夾，將JSON file 存入本地資料夾
+    directory = "download_from_s3_file"
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     # S3 download
     download_file_from_s3(bucket_name, object_key, file_name)
-
     with open(file_name, 'r', encoding='utf-8') as f:
         cycle_indicator = json.load(f)
     print(json.dumps(cycle_indicator, indent=4, ensure_ascii=False))

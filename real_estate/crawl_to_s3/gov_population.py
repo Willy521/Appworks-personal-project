@@ -2,6 +2,9 @@
 import requests
 import json
 import boto3
+from dotenv import load_dotenv
+from datetime import datetime
+import os
 
 
 def create_url(start_time, last_date_queried):
@@ -10,15 +13,11 @@ def create_url(start_time, last_date_queried):
     return updated_url
 
 
-def upload_file_to_s3(file_name, bucket, object_name=None):
+# 上傳到S3
+def upload_file_to_s3(file_name, bucket):
     s3 = boto3.client('s3')
-
-    if object_name is None:
-        object_name = file_name
-
     try:
-        s3.upload_file(file_name, bucket, object_name)
-        print(f"File {file_name} uploaded to {bucket} as {object_name}.")
+        s3.upload_file(file_name, bucket, file_name)  # 本地的文件路徑跟S3設為一樣
         return True
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -26,8 +25,14 @@ def upload_file_to_s3(file_name, bucket, object_name=None):
 
 
 def main():
-    # 發送GET請求
-    response = requests.get(create_url('2000-M1', '2024-M4'))  # 設定start, end time
+    load_dotenv()  # S3環境變數
+
+    start_time = '2000-M1' # Set start_time
+    now = datetime.now()  # Get current year and month for end_time
+    end_time = now.strftime('%Y-M%m')  # Format it to 'YYYY-MM'
+    # print('end_time', end_time)
+    response = requests.get(create_url(start_time, end_time))
+
     if response.status_code == 200:
         try:
             data = json.loads(response.text)
@@ -35,7 +40,11 @@ def main():
             print(json.dumps(data, indent=4, ensure_ascii=False))  # Pretty print the output
 
             # Save as JSON file
-            json_file_path = "crawl_to_s3/society_population_data.json"  # 存到S3的crawl_to_s3資料夾
+            # 在本地創建一個資料夾，將JSON file 存入資料夾並上傳到S3
+            directory = "crawl_to_s3_file"
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            json_file_path = "crawl_to_s3_file/population_data.json"  # 存到S3的crawl_to_s3資料夾
 
             with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
