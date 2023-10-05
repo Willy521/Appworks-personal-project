@@ -1,4 +1,5 @@
 # anue_wordcloud
+
 import json
 import pymysql
 from decouple import config
@@ -67,18 +68,19 @@ def main():
 
     # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
-    object_key = 'crawl_to_s3/anue_news_data.json'
-    file_name = 'anue_news_data.json'
+    object_key = 'crawl_to_s3_file/anue_news_data.json'  # S3文件的名字
+    file_name = "download_from_s3_file/anue_news_data.json"  # 本地保存的文件名
+
 
     # S3 download
-    download_file_from_s3(bucket_name, object_key, file_name)
+    # 在本地創建一個資料夾，將JSON file 存入本地資料夾
+    directory = "download_from_s3_file"
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
+    download_file_from_s3(bucket_name, object_key, file_name)
     with open(file_name, 'r', encoding='utf-8') as f:
         news_data = json.load(f)
-
-    # 本地路徑
-    # with open('/Users/chenweiting/Desktop/AppWorks_Personal_Project/crawl_to_s3/anue_news_data.json', 'r', encoding='utf-8') as f:
-    #     news_data = json.load(f)
 
     conn = connect_to_db()
     try:
@@ -102,9 +104,12 @@ def main():
             print("have inserted")
         conn.commit()
     except Exception as e:
-        print(f"發生錯誤: {e}")
+        print(f"error: {e}")
     conn.close()
 
+
+
+    # 應該還要從an news table 用id 篩選出日期前10天的新聞兒不是直接for item in news_data:
     # 第一次請 openai 將每一則新聞整理出兩句話(尚未給關鍵字)
     first_time_sentences = []
     for item in news_data:
@@ -113,7 +118,7 @@ def main():
     print("first_time_sentences", first_time_sentences)
 
     # 第二次 openai 挑出關鍵句子
-    prompt_1 = f"幫我從這個 list {first_time_sentences} 仔細審查每個句子，找出10個最具代表性和最具影響力的名詞或短句(每一句10字以內)，請把10個結果裝在一個list的形式給我。我要做文字雲讓觀看者可以一眼知道最近的話題"
+    prompt_1 = f"幫我從這個 list {first_time_sentences} 仔細審查每個句子，濃縮成10個具有代表性描述的名詞或短句(每一句10字以內)，請把10個結果裝在一個list的形式給我。我要做文字雲讓觀看者可以一眼知道最近的話題"
 
     # 開始一個無窮循環
     while True:
