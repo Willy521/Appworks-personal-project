@@ -43,8 +43,8 @@ def main():
     load_dotenv()
     # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
-    object_key = 'crawl_to_s3/economic_gdp_data.json'
-    file_name = 'economic_gdp_data.json'
+    object_key = 'crawl_to_s3_file/gdp_data.json'  # S3文件的名字
+    file_name = 'download_from_s3_file/gdp_data.json'  # 本地保存的文件名
 
     # S3 download
     download_file_from_s3(bucket_name, object_key, file_name)
@@ -97,9 +97,7 @@ def main():
             observations_13 = gdp_indicator['data']['dataSets'][0]['series']['13']['observations']
             observations_14 = gdp_indicator['data']['dataSets'][0]['series']['14']['observations']
 
-
             time_structure = gdp_indicator['data']['structure']['dimensions']['observation'][0]['values']
-
 
             data_to_insert = []
             for idx, time_info in enumerate(time_structure):
@@ -129,17 +127,34 @@ def main():
                     national_income_million_usd, income_per_capita_nyd, income_per_capita_usd
                 ))
 
-                insert_query = """
-                    INSERT IGNORE INTO economic_gdp_indicator (
-                        time_id, time_name, mid_year_population, average_exchange_rate,
-                        economic_growth_rate, gdp_million_nyd, gdp_million_usd,
-                        gdp_per_capita_nyd, gdp_per_capita_usd, gni_million_nyd, gni_million_usd,
-                        gni_per_capita_nyd, gni_per_capita_usd, national_income_million_nyd,
-                        national_income_million_usd, income_per_capita_nyd, income_per_capita_usd
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-
-                cursor.executemany(insert_query, data_to_insert)
-                conn.commit()
+            insert_query = """
+                INSERT INTO economic_gdp_indicator (
+                    time_id, time_name, mid_year_population, average_exchange_rate,
+                    economic_growth_rate, gdp_million_nyd, gdp_million_usd,
+                    gdp_per_capita_nyd, gdp_per_capita_usd, gni_million_nyd, gni_million_usd,
+                    gni_per_capita_nyd, gni_per_capita_usd, national_income_million_nyd,
+                    national_income_million_usd, income_per_capita_nyd, income_per_capita_usd
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    time_name = VALUES(time_name), 
+                    mid_year_population = VALUES(mid_year_population),
+                    average_exchange_rate = VALUES(average_exchange_rate), 
+                    economic_growth_rate = VALUES(economic_growth_rate),
+                    gdp_million_nyd = VALUES(gdp_million_nyd),
+                    gdp_million_usd = VALUES(gdp_million_usd),
+                    gdp_per_capita_nyd = VALUES(gdp_per_capita_nyd),
+                    gdp_per_capita_usd = VALUES(gdp_per_capita_usd),
+                    gni_million_nyd = VALUES(gni_million_nyd),
+                    gni_million_usd = VALUES(gni_million_usd),
+                    gni_per_capita_nyd = VALUES(gni_per_capita_nyd),
+                    gni_per_capita_usd = VALUES(gni_per_capita_usd),
+                    national_income_million_nyd = VALUES(national_income_million_nyd),
+                    national_income_million_usd = VALUES(national_income_million_usd),
+                    income_per_capita_nyd = VALUES(income_per_capita_nyd),
+                    income_per_capita_usd = VALUES(income_per_capita_usd)
+            """
+            cursor.executemany(insert_query, data_to_insert)
+            conn.commit()
     finally:
         conn.close()
 

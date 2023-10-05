@@ -43,8 +43,8 @@ def main():
     load_dotenv()
     # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
-    object_key = 'crawl_to_s3/society_population_data.json'
-    file_name = 'society_population_data.json'
+    object_key = 'crawl_to_s3_file/population_data.json'  # S3文件的名字
+    file_name = 'download_from_s3_file/population_data.json'  # 本地保存的文件名
 
     # S3 download
     download_file_from_s3(bucket_name, object_key, file_name)
@@ -117,16 +117,30 @@ def main():
                     population_density_per_square_km
                 ))
 
-                insert_query = """
-                    INSERT IGNORE INTO society_population_data (
-                        time_id, time_name, land_area_square_km, number_of_townships, number_of_villages, 
-                        number_of_neighborhoods, household_count, population_count, population_growth_rate, 
-                        male_population_count, female_population_count, gender_ratio, average_household_size, 
-                        population_density_per_square_km
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                cursor.executemany(insert_query, data_to_insert)
-                conn.commit()
+            upsert_query = """
+            INSERT INTO society_population_data (
+                time_id, time_name, land_area_square_km, number_of_townships, number_of_villages, 
+                number_of_neighborhoods, household_count, population_count, population_growth_rate, 
+                male_population_count, female_population_count, gender_ratio, average_household_size, 
+                population_density_per_square_km
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                time_name = VALUES(time_name),
+                land_area_square_km = VALUES(land_area_square_km),
+                number_of_townships = VALUES(number_of_townships),
+                number_of_villages = VALUES(number_of_villages),
+                number_of_neighborhoods = VALUES(number_of_neighborhoods),
+                household_count = VALUES(household_count),
+                population_count = VALUES(population_count),
+                population_growth_rate = VALUES(population_growth_rate),
+                male_population_count = VALUES(male_population_count),
+                female_population_count = VALUES(female_population_count),
+                gender_ratio = VALUES(gender_ratio),
+                average_household_size = VALUES(average_household_size),
+                population_density_per_square_km = VALUES(population_density_per_square_km)
+            """
+            cursor.executemany(upsert_query, data_to_insert)
+            conn.commit()
     except Exception as e:
         print(f"Error inserting data: {e}")
     finally:
