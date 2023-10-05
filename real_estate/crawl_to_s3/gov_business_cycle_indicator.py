@@ -1,6 +1,11 @@
+# 景氣指標
+
 import requests
 import json
 import boto3
+from dotenv import load_dotenv
+import os
+from datetime import datetime
 
 
 def create_url(start_time, last_date_queried):  # create
@@ -9,15 +14,11 @@ def create_url(start_time, last_date_queried):  # create
     return updated_url
 
 
-def upload_file_to_s3(file_name, bucket, object_name=None):
+# 上傳到S3
+def upload_file_to_s3(file_name, bucket):
     s3 = boto3.client('s3')
-
-    if object_name is None:
-        object_name = file_name
-
     try:
-        s3.upload_file(file_name, bucket, object_name)
-        print(f"File {file_name} uploaded to {bucket} as {object_name}.")
+        s3.upload_file(file_name, bucket, file_name)  # 本地的文件路徑跟S3設為一樣
         return True
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -25,17 +26,27 @@ def upload_file_to_s3(file_name, bucket, object_name=None):
 
 
 def main():
-    response = requests.get(create_url('2000-M1', '2024-M4'))  # Set the start and end time
+    load_dotenv()  # S3環境變數
 
-    if response.status_code == 200:
-        try:
+    start_time = '2000-M1' # Set start_time
+    now = datetime.now()  # Get current year and month for end_time
+    end_time = now.strftime('%Y-M%m')  # Format it to 'YYYY-MM'
+    # print('end_time', end_time)
+    response = requests.get(create_url(start_time, end_time))
+
+    if response.status_code == 200:  # 判斷response成功與否
+        try:  # 判斷是否是有效的JSON格式
             data = json.loads(response.text)
 
             print('API Response:')
             print(json.dumps(data, indent=4, ensure_ascii=False))  # Pretty print the output
 
             # Save as JSON file
-            json_file_path = "crawl_to_s3/economic_business_cycle_data.json"  # 存到S3的crawl_to_s3資料夾
+            # 在本地創建一個資料夾，將JSON file 存入資料夾並上傳到S3
+            directory = "crawl_to_s3_file"
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            json_file_path = "crawl_to_s3_file/business_cycle_data.json"
 
             with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
@@ -46,7 +57,6 @@ def main():
                 print("JSON file successfully uploaded to S3.")
             else:
                 print("Failed to upload JSON file to S3.")
-
         except json.JSONDecodeError:
             print("Received data isn't a valid JSON. Printing raw data:")
             print(response.text)
