@@ -1,9 +1,9 @@
-# Feature_crawler_S3_Integration_2.0
+# Feature S3_to_db_pipeline_2.0
 
-1. Add house cathay index to S3
-2. Add mortgage interest rates to S3
-3. Reorganized csv file for more data
-4. Modified other files and let these can upload to S3 at local site 
+1. House cathay index insert to rds 
+2. Mortgage interest rates insert to rds
+3. Modified other files and let these can download from S3 to local at local site
+
 
 
 

@@ -123,7 +123,6 @@ def main():
                 coincident_indicator_without_trend = VALUES(coincident_indicator_without_trend),
                 strategy_signal = VALUES(strategy_signal)
             """, data_to_insert)
-
             conn.commit()
 
     finally:
