@@ -1,4 +1,9 @@
-import pandas as pd
+import streamlit as st
+
+st.set_page_config(
+    page_title="Estate Data Hub",
+    layout="wide",
+)
 import matplotlib.pyplot as plt
 from datetime import datetime
 from wordcloud import WordCloud
@@ -9,8 +14,6 @@ import matplotlib.font_manager as fm
 import pydeck as pdk
 import altair as alt
 from geopy.geocoders import Nominatim
-import pydeck as pdk
-import streamlit as st
 import pandas as pd
 import folium
 from folium import Map, Marker
@@ -21,6 +24,20 @@ import numpy as np
 import plotly.express as px
 from collections import OrderedDict
 import plotly.graph_objects as go
+import matplotlib.ticker as ticker
+import yagmail
+import os
+import pymysql
+import streamlit as st
+import pandas as pd
+import numpy as np
+import pydeck as pdk
+import pymysql
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import hashlib
+
 
 
 # 環境變數
@@ -31,9 +48,6 @@ password_bytes = password.encode('utf-8')
 # # 中文字體路徑
 font_path = "./PingFang.ttc"
 font = fm.FontProperties(fname=font_path)
-
-# widemode
-st.set_page_config(layout="wide")
 
 
 # connect to db
@@ -50,32 +64,38 @@ def connect_db():
         print("Have connected to db")
         return conn
     except Exception as e:
-        print(f"发生错误: {e}")
+        print(f"error: {e}")
         return None
 
 
 # sidebar
 with st.sidebar:
     st.title('Estate Data Hub')
-    # st.subheader('Real Transactions, Genuine Data')
     st.caption(
-        'Introducing our Taiwan-centric real estate data dashboard designed to let "data lead the conversation."')
+        '為了解析台灣的房地產市場，構建了一個專門的數據庫，核心宗旨是「讓數據為市場說話」。除了提供預售屋的實價登錄資料作為房地產市場核心的代表，還融合了多種市場影響因子，全面評估房市交易狀態。將幫助您獲得市場真實脈絡，為購房決策提供堅實的依據。')
     st.divider()
-    st.subheader('Navigator')
+
+    st.subheader('導覽')
     add_radio = st.radio(
-        "Data Pages",
-        ("Taiwanese Overall House Price", "Trading Hotspots", "Impact Factors")
+        "分頁",
+        ("全台整體房市交易狀況", "區域交易熱點分析", "房市影響因子")
     )
     st.divider()
-    st.subheader('Features')
-    st.caption('1. Data-First Approach: Encouraging decisions rooted in accurate information.')
-    st.caption('2. Rich Database: Covers transaction details, market trends, and supply-demand metrics.')
-    st.caption(
-        '3. Holistic Monitoring: Tracks external factors like financial policies and global economic indicators.')
+    st.subheader('特色功能')
+    st.caption('1. **全台整體房市交易狀況**：')
+    st.caption('首頁呈現與房價緊密相關的因子，追蹤其近期走勢及其對房價的潛在影響。也展示預售屋價格與六都交易情況，而文字雲部分則快速揭示市場熱點與公眾評價。')
+
+    st.caption('2. **交易細節、市場分析和趨勢**：')
+    st.caption('提供近年區域細節的實價登錄資訊，展示區域交易量與價格的排名，讓您了解您所在城市的分區交易狀況和熱點排行。')
+
+    st.caption('3. **探索影響房價的核心因子**：')
+    st.caption('您可以觀察歷史數據並從經濟、社會、政策三面探索房價影響因子。我們分析特定事件的相關性，並在儀表板首頁即時追蹤四大核心因子，提供您做出決策的依據。')
 
 # Taiwanese Overall House Price
-if add_radio == "Taiwanese Overall House Price":
+if add_radio == "全台整體房市交易狀況":
+    st.header('房價關鍵因子即時追蹤')
     col1, col2, col3, col4 = st.columns(4)
+
 
     def fix_year_quarter(date_str):
         year, quarter = date_str.split('年', 1)
@@ -99,7 +119,7 @@ if add_radio == "Taiwanese Overall House Price":
         df = df[df[data_name] != 0]
         df['time_name'] = df['time_name'].apply(fix_year_quarter)
         df['time_name'] = pd.to_datetime(df['time_name'], format=time_format)
-        df = df[df['time_name'] >= pd.to_datetime('now') - pd.DateOffset(years=10)]
+        df = df[df['time_name'] >= pd.to_datetime('now') - pd.DateOffset(years=5)]
 
         if len(df) >= 2:
             latest_data = df.iloc[-1][data_name]
@@ -110,6 +130,7 @@ if add_radio == "Taiwanese Overall House Price":
             growth_rate = 0
 
         return latest_data, growth_rate, df
+
 
     def fix_year_month(date_str):
         year, month = date_str.split('/')
@@ -152,11 +173,12 @@ if add_radio == "Taiwanese Overall House Price":
 
 
     # 經濟成長率
-    latest_data, growth_rate, df1 = fetch_data('economic_gdp_indicator', ['time_name', 'economic_growth_rate'], 'economic_growth_rate')
+    latest_data, growth_rate, df1 = fetch_data('economic_construction_cost', ['time_name', 'construction_index'],
+                                               'construction_index', time_format='%Y年%m月')
     with col1:
-        st.metric("經濟成長率", f"{latest_data}", f"{growth_rate:.2f}%")
+        st.metric("建築成本", f"{latest_data}", f"{growth_rate:.2f}%")
         fig, ax = plt.subplots(figsize=(5.33, 2))
-        ax.plot(df1['time_name'], df1['economic_growth_rate'], 'r-')
+        ax.plot(df1['time_name'], df1['construction_index'], 'r-')
         ax.axis('off')
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
@@ -173,20 +195,20 @@ if add_radio == "Taiwanese Overall House Price":
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
 
-    # 建築成本
-    latest_data, growth_rate, df3 = fetch_data('economic_construction_cost', ['time_name', 'construction_index'],
-                                               'construction_index', time_format='%Y年%m月')
+    # 全台戶量(人/戶)
+    latest_data, growth_rate, df3 = fetch_data('society_population_data', ['time_name', 'average_household_size'],
+                                               'average_household_size', time_format='%Y年%m月')
     with col3:
-        st.metric("建築成本", f"{latest_data}", f"{growth_rate:.2f}%")
+        st.metric("全台戶量(人/戶)", f"{latest_data}", f"{growth_rate:.2f}%")
         fig, ax = plt.subplots(figsize=(5.33, 2))
-        ax.plot(df3['time_name'], df3['construction_index'], 'r-')
+        ax.plot(df3['time_name'], df3['average_household_size'], 'r-')
         ax.axis('off')
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
 
     # 利率
     latest_data, growth_rate, df4 = fetch_data_rates('mortgage_interest_rates', ['period', 'rate'], 'rate',
-                                               time_format='%Y-%m')
+                                                     time_format='%Y-%m')
     with col4:
         st.metric("五大銀行平均房貸利率", f"{latest_data}", f"{growth_rate:.2f}%")
         fig, ax = plt.subplots(figsize=(5.33, 2))
@@ -194,12 +216,12 @@ if add_radio == "Taiwanese Overall House Price":
         ax.axis('off')
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
-    with st.expander("See the explanation of the index"):
+    with st.expander("這些圖表的意義為何？"):
         st.write("""
-            This dashboard homepage prominently features four key factors, serving as a sophisticated reflection of the current real estate market trends. These selected factors stand out as the top four items exhibiting the highest correlation to housing prices within the existing dataset. By meticulously analyzing these pivotal items, users can gain invaluable insights and closely observe the directional flow of the housing market. The revelation of these correlated factors aids users in making informed and strategic decisions, allowing them to navigate through the intricate realm of real estate with enhanced clarity and confidence.
+此儀表板區塊呈現了與房價最具關聯的前四大因子，皆基於深度相關性分析所選。這些因子整合了最近五年的數據，並即時反映資料源的最新更新，確保您能追蹤其近期走勢及其對房價的潛在影響。藉由此設計，您不僅能瞭解近期市場趨勢，還能基於最新數據做出明智的決策。
         """)
 
-    st.subheader('全國房屋指數(國泰房價指數)')
+    st.header('全國房屋指數(國泰房價指數)')
     # 連接數據庫並選取所有數據
     try:
         conn = connect_db()
@@ -209,7 +231,6 @@ if add_radio == "Taiwanese Overall House Price":
             result = cursor.fetchall()
 
         df = pd.DataFrame(result, columns=['id', 'period', 'city', 'index_value'])
-
 
         # 畫分區圖
         cities = df['city'].unique().tolist()
@@ -226,19 +247,16 @@ if add_radio == "Taiwanese Overall House Price":
                 value=(periods[0], periods[-1])
             )
 
-
             # 使用選定的時間範圍進一步過濾 df_filtered
             df_filtered = df_filtered[df_filtered['period'].between(start_period, end_period)]
 
             df_pivot = df_filtered.pivot(index='period', columns='city', values='index_value')
             # st.line_chart(df_pivot) # 原始大小
 
-
-
             # 可調整大小
             fig = px.line(df_pivot.reset_index(), x='period', y=df_pivot.columns,
-                          labels={'value': 'Index Value', 'variable': 'City', 'period': 'Period'},
-                          width=1200, height=500)  # 這裡調整 width 和 height
+                          labels={'value': '指數', 'variable': '城市', 'period': '時間'},
+                          width=1200, height=550)  # 這裡調整 width 和 height
 
             # st.subheader('國泰房價指數')
             st.plotly_chart(fig)
@@ -247,18 +265,17 @@ if add_radio == "Taiwanese Overall House Price":
 
         # 使用 st.expander 來添加一個可展開和折疊的區塊。
         # 用另一個 expander 來提供額外的解釋或資訊。
-        with st.expander("See the explanation of the index"):
+        with st.expander("這些圖表的意義為何？"):
             st.write("""
-                The chart above shows the housing index for the selected cities.
-                You can select or deselect cities from the multiselect box to view the corresponding trend chart.
+                國泰房價指數為國泰建設與政治大學台灣房地產研究中心、不動產界學者合作編製，於每季發布研究成果(目前更新至112年第2季度)，主要是針對「預售及新屋物件」，為國內房地產主要參考指標之一。
             """)
 
     except Exception as e:
         st.error(f"錯誤: {e}")
+
+
     # finally:
     #     conn.close()
-
-
 
     # 近三季量能排行
     def parse_date(transaction_date_str):
@@ -268,7 +285,7 @@ if add_radio == "Taiwanese Overall House Price":
         return f"{year}-{month:02d}-{day:02d}"
 
 
-    st.subheader('近四個月六都量能排行')
+    st.header('近四個月六都量能分析')
 
     try:
         conn = connect_db()
@@ -301,7 +318,7 @@ if add_radio == "Taiwanese Overall House Price":
         df_grouped = df_filtered.groupby(['month', 'city'])['transaction_count'].sum().reset_index()
 
         # Define cities and months order
-        cities = ['新北市','臺北市', '桃園市', '臺中市', '臺南市', '高雄市']
+        cities = ['臺北市', '新北市', '桃園市', '臺中市', '臺南市', '高雄市']
         months = df_grouped['month'].unique()
 
         # Create the figure and axes
@@ -321,50 +338,31 @@ if add_radio == "Taiwanese Overall House Price":
         # Adjust the layout
         fig.update_layout(
             # title='近三個月六都量能比較',
-            xaxis_title='City',
-            yaxis_title='Numbers',
+            xaxis_title='城市',
+            yaxis_title='戶',
             barmode='group',
             bargap=0.15,
             bargroupgap=0.1,
-            width = 1200,  # Adjust the width here
-            height = 500  # Adjust the height here
+            width=1200,  # Adjust the width here
+            height=500  # Adjust the height here
         )
 
         st.plotly_chart(fig)
-        with st.expander("See the explanation of the index"):
+        with st.expander("這些圖表的意義為何？"):
             st.write("""
-                The chart above shows the housing index for the selected cities.
-                You can select or deselect cities from the multiselect box to view the corresponding trend chart.
+                以月份切分，觀察各主要縣市的交易量不僅能鮮明地突顯每個縣市間的交易差異，也可以讓您明確掌握房地產的短期變化。這種差異讓您初步了解各地的交易狀況。有了這樣的基礎認識，您可以再深入探究單一城市內不同區域的具體交易動態。這不僅有助於識別哪些地區在特定時期較為活躍，還可以進一步預測未來的市場趨勢，成為您投資或購房決策的重要依據。
             """)
 
 
     except Exception as e:
         st.error(f"錯誤: {e}")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    st.subheader('輿情分析')
-
+    st.header('輿情分析')
     # 连接到数据库并查询id=12的列
     try:
         conn = connect_db()
         with conn.cursor() as cursor:
-            sql = "SELECT keyword FROM keywords_table WHERE id=21"
+            sql = "SELECT keyword FROM keywords_table WHERE id=22"
             cursor.execute(sql)
             result = cursor.fetchone()  # 获取单个查询结果
             keyword_string = result[0] if result else ""
@@ -374,7 +372,6 @@ if add_radio == "Taiwanese Overall House Price":
         keyword_string = ""
     finally:
         conn.close()
-
 
     # 把 list_string 转换成一个 Python 列表
     if keyword_string:
@@ -396,25 +393,176 @@ if add_radio == "Taiwanese Overall House Price":
 
     # 在Streamlit中显示
     st.pyplot(plt)
+    with st.expander("這些圖表的意義為何？"):
+        st.write("""
+            整理近一月的主要房市新聞，透過文字雲呈現市場焦點和熱門公眾話題，助您迅速掌握市場脈動。
+        """)
 
 
 # Trading Hotspots
-elif add_radio == "Trading Hotspots":
-    st.title('Trading Hotspots')
+elif add_radio == "區域交易熱點分析":
+
+
+    # # st.title('區域交易熱點分析')
+    # st.header('六都預售屋實價登錄')
+    #
+    # # 篩選城市
+    # cities = ['臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '臺中市', '臺南市', '高雄市']
+    # selected_city = st.selectbox('條件篩選欄', cities)
+    # st.subheader(f'{selected_city} 預售屋實價登錄')
+    #
+    #
+    # # 將 交易年月日 轉換為西元年
+    # def convert_to_ad(date_str):
+    #     try:
+    #         year, month, day = int(date_str[:3]), int(date_str[3:5]), int(date_str[5:])
+    #         return datetime(year + 1911, month, day)
+    #     except ValueError:
+    #         return None
+    #
+    # conn = connect_db()
+    # if conn:
+    #     try:
+    #         with conn.cursor() as cursor:
+    #             # 加入 WHERE 子句來過濾特定城市的數據
+    #             cursor.execute(
+    #                 f'SELECT city, district, transaction_sign, address, build_case, buildings_and_number, transaction_date, total_price_NTD, unit_price_NTD_per_square_meter, berth_category, land_area, zoning, transaction_pen_number, shifting_level, total_floor_number, building_state, main_use, main_building_materials, building_area, pattern_room, pattern_hall, pattern_health, pattern_compartmented, has_management_organization, berth_area, berth_total_price_NTD, note, serial_number FROM real_estate WHERE city = "{selected_city}"')
+    #             data = cursor.fetchall()
+    #
+    #
+    #
+    #             # Convert the data to a pandas DataFrame 可以自定義欄位名稱
+    #             df = pd.DataFrame(data,
+    #                               columns=['城市', '鄉鎮市區', '交易標的', '土地位置建物門牌', '建案名稱', '棟及號', '交易年月日', '總價元', '單價元平方公尺',
+    #                                        '車位類別', '土地移轉總面積平方公尺', '都市土地使用分區', '交易筆棟數', '移轉層次', '總樓層數', '建物型態', '主要用途',
+    #                                        '主要建材', '建物移轉總面積平方公尺', '建物現況格局-房', '建物現況格局-廳', '建物現況格局-衛', '建物現況格局-隔間',
+    #                                        '有無管理組織', '車位移轉總面積平方公尺', '車位總價元', '備註', '編號', ])
+    #
+    #             # 將 交易年月日 轉換為西元日期
+    #             df['交易年月日'] = df['交易年月日'].apply(convert_to_ad)
+    #             df.dropna(subset=['交易年月日'], inplace=True)
+    #             df['交易年月日'] = pd.to_datetime(df['交易年月日'])
+    #
+    #             # slider
+    #             min_date = df['交易年月日'].min().to_pydatetime()
+    #             max_date = df['交易年月日'].max().to_pydatetime()
+    #             start_date, end_date = st.slider('選擇日期範圍', min_value=min_date, max_value=max_date,
+    #                                              value=(min_date, max_date))
+    #             filtered_df = df[(df['交易年月日'] >= start_date) & (df['交易年月日'] <= end_date)]
+    #             st.write(filtered_df)
+    #
+    #             # 成交量柱狀圖
+    #             # filtered_df.set_index('交易年月日', inplace=True)
+    #             # df_resampled = filtered_df.resample('D').size()
+    #             # st.subheader(f'{selected_city} 預售屋總體成交量分析')
+    #             # st.bar_chart(df_resampled)
+    #
+    #             filtered_df.set_index('交易年月日', inplace=True)
+    #             df_resampled = filtered_df.resample('D').size().reset_index()
+    #             df_resampled.columns = ['交易年月日', '成交量']
+    #
+    #             fig = px.bar(df_resampled, x='交易年月日', y='成交量')
+    #
+    #             fig.update_layout(
+    #                 height=500,
+    #                 width=1100,
+    #                 xaxis_title="時間",
+    #                 yaxis_title="戶",
+    #                 plot_bgcolor='#0f1116',  # 背景色
+    #                 paper_bgcolor='#0f1116',  # 畫布背景色
+    #                 font=dict(color='white')  # 文字顏色
+    #             )
+    #
+    #             st.plotly_chart(fig)
+    #
+    #             # 分區折線圖
+    #             filtered_df['鄉鎮市區'].fillna('未知', inplace=True)  # 鄉鎮區有nan值
+    #             unique_areas = filtered_df['鄉鎮市區'].unique()
+    #             selected_areas = st.multiselect('選擇鄉鎮市區', options=unique_areas.tolist(), default=unique_areas.tolist())
+    #
+    #             # 使用保留的 '日期' 列來創建折線圖的 DataFrame
+    #             line_chart_df = filtered_df.groupby(['交易年月日', '鄉鎮市區']).size().reset_index(name='交易量')
+    #             line_chart_df = line_chart_df.pivot(index='交易年月日', columns='鄉鎮市區', values='交易量').fillna(0)
+    #
+    #             colors = ['#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c',
+    #                       '#98df8a', '#d62728', '#ff9896', '#9467bd', '#c5b0d5',
+    #                       '#8c564b', '#c49c94', '#e377c2', '#f7b6d2', '#7f7f7f',
+    #                       '#c7c7c7', '#bcbd22', '#dbdb8d', '#17becf', '#9edae5']
+    #
+    #             # 使用plotly繪製折線圖
+    #             fig = px.line(line_chart_df, x=line_chart_df.index, y=selected_areas, color_discrete_sequence=colors)
+    #
+    #             # 客製化圖形
+    #             fig.update_layout(
+    #                 height=500,
+    #                 width=1200,
+    #                 xaxis_title="時間",
+    #                 yaxis_title="戶",
+    #                 plot_bgcolor='#0f1116',  # 背景色
+    #                 paper_bgcolor='#0f1116',  # 畫布背景色
+    #                 font=dict(color='white')  # 文字顏色
+    #             )
+    #
+    #             # 在streamlit上顯示圖形
+    #             st.plotly_chart(fig)
+    #
+    #
+    #             # 圓餅圖表示各個建案的交易次數佔比
+    #
+    #             # 基於所選的城市，提供區域的下拉式選單
+    #             districts = df['鄉鎮市區'].unique()
+    #             selected_district = st.selectbox(f'選擇 {selected_city} 的區域', options=districts.tolist())
+    #             st.subheader(f'{selected_city} {selected_district} 建案銷售佔比')
+    #
+    #             # 根據選定的城市和區域進行篩選
+    #             filtered_df = df[(df['城市'] == selected_city) & (df['鄉鎮市區'] == selected_district)]
+    #
+    #             pie_df = filtered_df.groupby('建案名稱').size().reset_index(name='交易次數')
+    #             pie_df = pie_df.sort_values('交易次數', ascending=False)
+    #
+    #             pie_fig = px.pie(pie_df, values='交易次數', names='建案名稱')
+    #
+    #             pie_fig.update_layout(
+    #                 height=500,
+    #                 width=1200,
+    #                 font=dict(color='white'),  # 文字顏色
+    #                 plot_bgcolor='#0f1116',  # 背景色
+    #                 paper_bgcolor='#0f1116',  # 畫布背景色
+    #             )
+    #
+    #             # 在streamlit上顯示圓餅圖
+    #             st.plotly_chart(pie_fig)
+    #
+    #     except Exception as e:
+    #         st.error(f"Error while fetching data: {e}")
+    # 定義一個函數來計算數據的哈希值，以便作為快取的鍵
+    def compute_hash(data):
+        return hashlib.sha256(str(data).encode()).hexdigest()
+
+
+    # 定義一個函數來將數據保存到快取中
+    @st.cache_data
+    def load_data(selected_city):
+        conn = connect_db()
+        if conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        f'SELECT city, district, transaction_sign, address, build_case, buildings_and_number, transaction_date, total_price_NTD, unit_price_NTD_per_square_meter, berth_category, land_area, zoning, transaction_pen_number, shifting_level, total_floor_number, building_state, main_use, main_building_materials, building_area, pattern_room, pattern_hall, pattern_health, pattern_compartmented, has_management_organization, berth_area, berth_total_price_NTD, note, serial_number FROM real_estate WHERE city = "{selected_city}"')
+                    data = cursor.fetchall()
+                    return data
+            except Exception as e:
+                st.error(f"Error while fetching data: {e}")
+
 
     # 篩選城市
-    cities = ['新北市', '台北市', '桃園市', '台中市', '新竹市']
+    cities = ['臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '臺中市', '臺南市', '高雄市']
     selected_city = st.selectbox('條件篩選欄', cities)
     st.subheader(f'{selected_city} 預售屋實價登錄')
 
+    # 從快取中加載數據
+    data = load_data(selected_city)
 
-    @st.cache_data
-    def load_data():
-        df = pd.read_csv('/Users/chenweiting/Downloads/f_lvr_land_b.csv')  # 之後改資料源
-        df['交易年月日'] = df['交易年月日'].apply(convert_to_ad)
-        df.dropna(subset=['交易年月日'], inplace=True)
-        df['交易年月日'] = pd.to_datetime(df['交易年月日'])
-        return df
 
     # 將 交易年月日 轉換為西元年
     def convert_to_ad(date_str):
@@ -424,20 +572,47 @@ elif add_radio == "Trading Hotspots":
         except ValueError:
             return None
 
-    df = load_data()
+
+    # Convert the data to a pandas DataFrame 可以自定義欄位名稱
+    df = pd.DataFrame(data,
+                      columns=['城市', '鄉鎮市區', '交易標的', '土地位置建物門牌', '建案名稱', '棟及號', '交易年月日', '總價元', '單價元平方公尺',
+                               '車位類別', '土地移轉總面積平方公尺', '都市土地使用分區', '交易筆棟數', '移轉層次', '總樓層數', '建物型態', '主要用途',
+                               '主要建材', '建物移轉總面積平方公尺', '建物現況格局-房', '建物現況格局-廳', '建物現況格局-衛', '建物現況格局-隔間',
+                               '有無管理組織', '車位移轉總面積平方公尺', '車位總價元', '備註', '編號', ])
+
+    # 將 交易年月日 轉換為西元日期
+    df['交易年月日'] = df['交易年月日'].apply(convert_to_ad)
+    df.dropna(subset=['交易年月日'], inplace=True)
+    df['交易年月日'] = pd.to_datetime(df['交易年月日'])
+
+    # slider
     min_date = df['交易年月日'].min().to_pydatetime()
     max_date = df['交易年月日'].max().to_pydatetime()
-    start_date, end_date = st.slider('選擇日期範圍', min_value=min_date, max_value=max_date, value=(min_date, max_date))
+    start_date, end_date = st.slider('選擇日期範圍', min_value=min_date, max_value=max_date,
+                                     value=(min_date, max_date))
     filtered_df = df[(df['交易年月日'] >= start_date) & (df['交易年月日'] <= end_date)]
     st.write(filtered_df)
 
+    # 成交量柱狀圖
     filtered_df.set_index('交易年月日', inplace=True)
-    df_resampled = filtered_df.resample('D').size()
-    st.subheader(f'{selected_city} 預售屋總體成交分析')
-    st.bar_chart(df_resampled)
+    df_resampled = filtered_df.resample('D').size().reset_index()
+    df_resampled.columns = ['交易年月日', '成交量']
 
-    # 選取區域並繪製區域交易量折線圖
-    # 選取 "鄉鎮市區" 並繪製對應的交易量折線圖
+    fig = px.bar(df_resampled, x='交易年月日', y='成交量')
+
+    fig.update_layout(
+        height=500,
+        width=1100,
+        xaxis_title="時間",
+        yaxis_title="戶",
+        plot_bgcolor='#0f1116',  # 背景色
+        paper_bgcolor='#0f1116',  # 畫布背景色
+        font=dict(color='white')  # 文字顏色
+    )
+
+    st.plotly_chart(fig)
+
+    # 分區折線圖
     filtered_df['鄉鎮市區'].fillna('未知', inplace=True)  # 鄉鎮區有nan值
     unique_areas = filtered_df['鄉鎮市區'].unique()
     selected_areas = st.multiselect('選擇鄉鎮市區', options=unique_areas.tolist(), default=unique_areas.tolist())
@@ -446,12 +621,53 @@ elif add_radio == "Trading Hotspots":
     line_chart_df = filtered_df.groupby(['交易年月日', '鄉鎮市區']).size().reset_index(name='交易量')
     line_chart_df = line_chart_df.pivot(index='交易年月日', columns='鄉鎮市區', values='交易量').fillna(0)
 
-    # start_date, end_date = st.slider('選擇日期範圍', min_value=min_date, max_value=max_date, value=(min_date, max_date))
+    colors = ['#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c',
+              '#98df8a', '#d62728', '#ff9896', '#9467bd', '#c5b0d5',
+              '#8c564b', '#c49c94', '#e377c2', '#f7b6d2', '#7f7f7f',
+              '#c7c7c7', '#bcbd22', '#dbdb8d', '#17becf', '#9edae5']
 
-    # 根據選定的 "鄉鎮市區" 繪製折線圖
-    st.subheader(f'{selected_city} 預售屋分區成交分析')
-    st.line_chart(line_chart_df[selected_areas])
+    # 使用plotly繪製折線圖
+    fig = px.line(line_chart_df, x=line_chart_df.index, y=selected_areas, color_discrete_sequence=colors)
 
+    # 客製化圖形
+    fig.update_layout(
+        height=500,
+        width=1200,
+        xaxis_title="時間",
+        yaxis_title="戶",
+        plot_bgcolor='#0f1116',  # 背景色
+        paper_bgcolor='#0f1116',  # 畫布背景色
+        font=dict(color='white')  # 文字顏色
+    )
+
+    # 在streamlit上顯示圖形
+    st.plotly_chart(fig)
+
+    # 圓餅圖表示各個建案的交易次數佔比
+
+    # 基於所選的城市，提供區域的下拉式選單
+    districts = df['鄉鎮市區'].unique()
+    selected_district = st.selectbox(f'選擇 {selected_city} 的區域', options=districts.tolist())
+    st.subheader(f'{selected_city} {selected_district} 建案銷售佔比')
+
+    # 根據選定的城市和區域進行篩選
+    filtered_df = df[(df['城市'] == selected_city) & (df['鄉鎮市區'] == selected_district)]
+
+    pie_df = filtered_df.groupby('建案名稱').size().reset_index(name='交易次數')
+    pie_df = pie_df.sort_values('交易次數', ascending=False)
+
+    pie_fig = px.pie(pie_df, values='交易次數', names='建案名稱')
+
+    pie_fig.update_layout(
+        height=600,
+        width=1200,
+        font=dict(color='white'),  # 文字顏色
+        plot_bgcolor='#0f1116',  # 背景色
+        paper_bgcolor='#0f1116',  # 畫布背景色
+    )
+
+    # 在streamlit上顯示圓餅圖
+    st.plotly_chart(pie_fig)
 
 
 
@@ -460,7 +676,7 @@ elif add_radio == "Trading Hotspots":
     # 先創一個新表格然後取100個新增座標
 
     from geopy.geocoders import Nominatim
-    import pymysql
+
     import time
 
     # # 建立資料庫連接
@@ -516,316 +732,96 @@ elif add_radio == "Trading Hotspots":
     #     conn.close()
 
     # query demo data
-    st.subheader('區域熱點')
-    import streamlit as st
-    import pandas as pd
-    import numpy as np
-    import pydeck as pdk
-    import pymysql
+    # st.subheader('區域熱點')
 
-    conn = connect_db()
-    cursor = conn.cursor()  # 定義 cursor
-
-    # 從數據庫中獲取數據
-    cursor.execute("SELECT latitude, longitude, address, build_case FROM house_price_map")
-    rows = cursor.fetchall()
-
-    # 數據格式化
-    data = pd.DataFrame(rows, columns=['lat', 'lon', 'address', 'build_case'])
-
-    st.write(data)  # 或者 st.table(data) 以表格的形式顯示
-
-    # 定義 tooltip
-    tooltip = {
-        "html": "<b>Value:</b>{elevationValue}",
-        "style": {"backgroundColor": "steelblue", "color": "white"}
-    }
-
-
-    # 3D 地圖的層
-    layer = pdk.Layer(
-        "HexagonLayer",
-        # 'ColumnLayer',
-        data=data,
-        get_position='[lon, lat]',
-        radius=200,
-        elevation_scale=8,
-        elevation_range=[0, 1000],
-        pickable=True,
-        extruded=True,
-    )
-
-    # 3D 地圖的視圖
-    # view_state = pdk.ViewState(latitude=25.0330, longitude=121.5654, zoom=11, pitch=45)
-    view_state = pdk.ViewState(latitude=25.0118, longitude=121.4559, zoom=11, pitch=45)
-
-
-    # 在 Streamlit 應用中渲染 3D 地圖
-    # st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    conn = connect_db()
-    cursor = conn.cursor()  # 定義 cursor
-
-    # 從數據庫中獲取數據
-    cursor.execute("SELECT latitude, longitude, address, build_case FROM house_price_map")
-    rows = cursor.fetchall()
-
-    # 數據格式化
-    data = pd.DataFrame(rows, columns=['lat', 'lon', 'address', 'build_case'])
-
-
-    # 定義 tooltip
-    tooltip = {
-        "html": "<b>Address:</b>{build_case}",
-        "style": {"backgroundColor": "steelblue", "color": "white"}
-    }
-
-
-    # 3D 地圖的層
-    layer = pdk.Layer(
-        # "HexagonLayer",
-        'ColumnLayer',
-        data=data,
-        get_position='[lon, lat]',
-        radius=200,
-        elevation_scale=80,
-        elevation_range=[0, 1000],
-        get_elevation='elevation',  # 如果 build_case 是数值，您可以直接将其用作 elevation
-        # get_fill_color='[255, 165, 0, 140]',  # 设置颜色为橙色，最后的 140 是透明度
-        get_fill_color='[build_case * 15, 165, 0]',
-        pickable=True,
-        extruded=True,
-    )
-
-    # 3D 地圖的視圖
-    view_state = pdk.ViewState(latitude=25.0330, longitude=121.5654, zoom=11, pitch=45)
-
-    # 在 Streamlit 應用中渲染 3D 地圖
-    # st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip))
-
-
-elif add_radio == "Impact Factors":
-    st.title('Impact Factors')
-    # st.subheader('景氣信號燈')
     #
-    # # connect to db
     # conn = connect_db()
+    # cursor = conn.cursor()  # 定義 cursor
     #
-    # try:
-    #     with conn.cursor() as cursor:
-    #         # 执行 SQL 查询
-    #         sql = "SELECT time_name, strategy_signal FROM economic_cycle_indicator"
-    #         cursor.execute(sql)
+    # # 從數據庫中獲取數據
+    # cursor.execute("SELECT latitude, longitude, address, build_case FROM house_price_map")
+    # rows = cursor.fetchall()
     #
-    #         # 获取结果
-    #         rows = cursor.fetchall()
-    # finally:
-    #     conn.close()
+    # # 數據格式化
+    # data = pd.DataFrame(rows, columns=['lat', 'lon', 'address', 'build_case'])
     #
+    # st.write(data)  # 或者 st.table(data) 以表格的形式顯示
+    # # st.table(data)
     #
-    # # 将结果转换为 DataFrame
-    # df = pd.DataFrame(rows, columns=['time_name', 'strategy_signal'])
-    # # 过滤掉 'strategy_signal' 为 0 的行
-    # df = df[df['strategy_signal'] != 0]
-    #
-    #
-    # # 修复年份并转换为日期格式
-    # def fix_year(date_str):
-    #     year, month = date_str.split('年', 1)
-    #     year = int(year)
-    #     if year < 1000:
-    #         year += 1911
-    #     return f"{year}年{month}"
-    #
-    #
-    # df['time_name'] = df['time_name'].apply(fix_year)
-    # df['time_name'] = pd.to_datetime(df['time_name'], format='%Y年%m月')
-    #
-    # # 绘制图形
-    # st.line_chart(df.set_index('time_name'))
-    #
-    # st.subheader('經濟年成長率')
-    #
-    # # 連接數據庫，讀取數據（請根據您的環境替換這部分）
-    # conn = connect_db()
-    # sql = "SELECT time_name, economic_growth_rate FROM economic_gdp_indicator"  # 請修改SQL查詢以適合您的表格
-    # df = pd.read_sql(sql, conn)
-    #
-    # # 定義一個字典來映射季度到月份
-    # quarter_to_month = {
-    #     '第1季': '04',
-    #     '第2季': '07',
-    #     '第3季': '10',
-    #     '第4季': '01'
+    # # 定義 tooltip
+    # tooltip = {
+    #     "html": "<b>Value:</b>{elevationValue}",
+    #     "style": {"backgroundColor": "steelblue", "color": "white"}
     # }
     #
-    # # 將 'time_name' 列拆分成年份和季度
-    # df['year'] = df['time_name'].str.split('年').str[0].astype(int) + 1911
-    # df['quarter'] = df['time_name'].str.split('年').str[1]
-    #
-    # # 對於第4季，需要將年份加1
-    # df.loc[df['quarter'] == '第4季', 'year'] = df['year'] + 1
-    #
-    # # 將季度映射到月份
-    # df['month'] = df['quarter'].map(quarter_to_month)
-    #
-    # # 組合年份和月份，並創建新的日期列
-    # df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month'] + '-01', format='%Y-%m-%d', errors='coerce')
-    #
-    # # 過濾掉 'economic_growth_rate', 'gdp_million_nyd' 等等為 0 的行
-    # filtered_df = df[(df['economic_growth_rate'] != 0)]
-    # # 然後，使用過濾後的 DataFrame 繪圖
-    # st.line_chart(filtered_df.set_index('date')['economic_growth_rate'])
-    # # 使用Streamlit繪製線圖
-    # # st.line_chart(df.set_index('date')['economic_growth_rate'])
-    #
-    # st.subheader('營建成本')
-    # # 数据库连接信息
-    # conn = pymysql.connect(
-    #     host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-    #     port=3306,
-    #     user='admin',
-    #     password=password_bytes,  # 确保password_bytes变量在此处是可用的
-    #     database='estate_data_hub',
-    #     charset='utf8mb4'
+    # # 3D 地圖的層
+    # layer = pdk.Layer(
+    #     "HexagonLayer",
+    #     # 'ColumnLayer',
+    #     data=data,
+    #     get_position='[lon, lat]',
+    #     radius=200,
+    #     elevation_scale=8,
+    #     elevation_range=[0, 1000],
+    #     pickable=True,
+    #     extruded=True,
     # )
     #
-    # try:
-    #     with conn.cursor() as cursor:
-    #         # 执行SQL查询
-    #         sql = "SELECT time_name, construction_index FROM economic_construction_cost"  # 请替换为您的实际表名
-    #         cursor.execute(sql)
+    # # 3D 地圖的視圖
+    # # view_state = pdk.ViewState(latitude=25.0330, longitude=121.5654, zoom=11, pitch=45)
+    # view_state = pdk.ViewState(latitude=25.0118, longitude=121.4559, zoom=11, pitch=45)
     #
-    #         # 获取结果
-    #         rows = cursor.fetchall()
+    # # 在 Streamlit 應用中渲染 3D 地圖
+    # # st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
+    # st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip))
     #
-    # finally:
-    #     conn.close()
-    #
-    # # 将结果转换为DataFrame
-    # df = pd.DataFrame(rows, columns=['time_name', 'construction_index'])
-    # df = df[df['construction_index'] != 0]
-    #
-    #
-    # # 修复年份并转换为日期格式
-    # def fix_year(date_str):
-    #     year, month = date_str.split('年', 1)
-    #     year = int(year)
-    #     if year < 1000:
-    #         year += 1911
-    #     return f"{year}年{month}"
-    #
-    #
-    # df['time_name'] = df['time_name'].apply(fix_year)
-    # df['time_name'] = pd.to_datetime(df['time_name'], format='%Y年%m月')
-    #
-    # # 绘制图形
-    # st.line_chart(df.set_index('time_name'))
-    #
-    # st.subheader('全台人口數量&戶數')
-    # # connect to db
-    # conn = pymysql.connect(
-    #     host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-    #     port=3306,
-    #     user='admin',
-    #     password=password_bytes,
-    #     database='estate_data_hub',
-    #     charset='utf8mb4'
-    # )
-    # try:
-    #     with conn.cursor() as cursor:
-    #         # 執行 SQL 查詢
-    #         sql = """SELECT time_name, household_count, population_count, average_household_size
-    #                      FROM society_population_data"""  # 請替換成您實際的表名
-    #         cursor.execute(sql)
-    #
-    #         # 獲取結果
-    #         rows = cursor.fetchall()
-    #
-    # finally:
-    #     conn.close()
-    #
-    # # 將結果轉換為 DataFrame
-    # df = pd.DataFrame(rows, columns=['time_name', 'household_count', 'population_count', 'average_household_size'])
-    #
-    # # 修復年份並轉換為日期格式
-    # def fix_year(date_str):
-    #     year, month = date_str.split('年', 1)
-    #     year = int(year)
-    #     if year < 1000:
-    #         year += 1911
-    #     return f"{year}年{month}"
-    #
-    #
-    # df['time_name'] = df['time_name'].apply(fix_year)
-    # df['time_name'] = pd.to_datetime(df['time_name'], format='%Y年%m月')
-    # df = df[df['household_count'] != 0]
-    #
-    # # 繪製圖形
-    # st.line_chart(df.set_index('time_name')[['household_count', 'population_count']])
-    #
-    # st.subheader('戶量(人/戶)')
-    # # connect to db
     # conn = connect_db()
-    # try:
-    #     with conn.cursor() as cursor:
-    #         # 執行 SQL 查詢
-    #         sql = """SELECT time_name,average_household_size
-    #                      FROM society_population_data"""  # 請替換成您實際的表名
-    #         cursor.execute(sql)
+    # cursor = conn.cursor()  # 定義 cursor
     #
-    #         # 獲取結果
-    #         rows = cursor.fetchall()
+    # # 從數據庫中獲取數據
+    # cursor.execute("SELECT latitude, longitude, address, build_case FROM house_price_map")
+    # rows = cursor.fetchall()
     #
-    # finally:
-    #     conn.close()
+    # # 數據格式化
+    # data = pd.DataFrame(rows, columns=['lat', 'lon', 'address', 'build_case'])
     #
-    # # 將結果轉換為 DataFrame
-    # df = pd.DataFrame(rows, columns=['time_name', 'average_household_size'])
+    # # 定義 tooltip
+    # tooltip = {
+    #     "html": "<b>Address:</b>{build_case}",
+    #     "style": {"backgroundColor": "steelblue", "color": "white"}
+    # }
     #
-    # # 修復年份並轉換為日期格式
-    # def fix_year(date_str):
-    #     year, month = date_str.split('年', 1)
-    #     year = int(year)
-    #     if year < 1000:
-    #         year += 1911
-    #     return f"{year}年{month}"
+    # # 3D 地圖的層
+    # layer = pdk.Layer(
+    #     # "HexagonLayer",
+    #     'ColumnLayer',
+    #     data=data,
+    #     get_position='[lon, lat]',
+    #     radius=200,
+    #     elevation_scale=80,
+    #     elevation_range=[0, 1000],
+    #     get_elevation='elevation',  # 如果 build_case 是数值，您可以直接将其用作 elevation
+    #     # get_fill_color='[255, 165, 0, 140]',  # 设置颜色为橙色，最后的 140 是透明度
+    #     get_fill_color='[build_case * 15, 165, 0]',
+    #     pickable=True,
+    #     extruded=True,
+    # )
     #
+    # # 3D 地圖的視圖
+    # view_state = pdk.ViewState(latitude=25.0330, longitude=121.5654, zoom=11, pitch=45)
     #
-    # df['time_name'] = df['time_name'].apply(fix_year)
-    # df['time_name'] = pd.to_datetime(df['time_name'], format='%Y年%m月')
-    # df = df[df['average_household_size'] != 0]
-    #
-    # # 繪製圖形
-    # st.line_chart(df.set_index('time_name')[['average_household_size']])
+    # # 在 Streamlit 應用中渲染 3D 地圖
+    # # st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
+    # st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip))
 
 
-
-
-
-
-
-
-    # 景氣信號燈 v.s. 經濟年成長率
+elif add_radio == "房市影響因子":
+    st.title('房價影響因子')
+    st.subheader('時間趨勢 & 相關性關係圖')
     conn = connect_db()
-    # Fix year and convert to datetime
+
+
+    # 格式轉換
     def fix_year(date_str):
         year, month = date_str.split('年', 1)
         year = int(year)
@@ -833,97 +829,197 @@ elif add_radio == "Impact Factors":
             year += 1911
         return f"{year}年{month}"
 
+
+    # 格式轉換
+    def fix_period(period_str):
+        year, quarter = period_str.split('Q')
+        year = int(year)
+        if year < 1000:
+            year += 1911
+
+        month_map = {
+            '1': '01',
+            '2': '04',
+            '3': '07',
+            '4': '10',
+        }
+        return f"{year}-{month_map[quarter]}-01"
+
+
+    # 格式轉換
+    def fix_period_mortgage(period_str):
+        year, month = period_str.split('/')
+        year = int(year)
+        if year < 1000:
+            year += 1911
+        return f"{year}-{month}-01"
+
+
     try:
         # Read the first DataFrame
         with conn.cursor() as cursor:
             cursor.execute("SELECT time_name, strategy_signal FROM economic_cycle_indicator")
             rows = cursor.fetchall()
             df1 = pd.DataFrame(rows, columns=['time_name', 'strategy_signal'])
-        df1 = df1[df1['strategy_signal'] != 0]
-        df1['time_name'] = df1['time_name'].apply(fix_year)
-        df1['time_name'] = pd.to_datetime(df1['time_name'], format='%Y年%m月')
+            df1.rename(columns={"strategy_signal": "景氣信號燈"}, inplace=True)
+            df1 = df1[df1['景氣信號燈'] != 0]
+            df1['time_name'] = df1['time_name'].apply(fix_year)
+            df1['time_name'] = pd.to_datetime(df1['time_name'], format='%Y年%m月')
 
         # Read the second DataFrame
-        df2 = pd.read_sql("SELECT time_name, economic_growth_rate FROM economic_gdp_indicator", conn)
+        df2 = pd.read_sql("SELECT time_name, economic_growth_rate as `經濟年成長率(%)` FROM economic_gdp_indicator", conn)
         df2['year'] = df2['time_name'].str.split('年').str[0].astype(int) + 1911
         df2['quarter'] = df2['time_name'].str.split('年').str[1]
         df2.loc[df2['quarter'] == '第4季', 'year'] = df2['year'] + 1
         df2['month'] = df2['quarter'].map({'第1季': '04', '第2季': '07', '第3季': '10', '第4季': '01'})
         df2['date'] = pd.to_datetime(df2['year'].astype(str) + '-' + df2['month'] + '-01', format='%Y-%m-%d',
                                      errors='coerce')
-        filtered_df2 = df2[df2['economic_growth_rate'] != 0]
+        filtered_df2 = df2[df2['經濟年成長率(%)'] != 0]
+
+        # 國泰房屋指數
+        df3 = pd.read_sql("SELECT period, index_value as `國泰房價指數(全國)` FROM house_cathay_index WHERE city = '全國'",
+                          conn)
+        df3['date'] = df3['period'].apply(fix_period)
+        df3['date'] = pd.to_datetime(df3['date'], format='%Y-%m-%d')
+
+        # 營造指數
+        df4 = pd.read_sql("SELECT time_name, construction_index as `營造工程總指數` FROM economic_construction_cost", conn)
+        df4['time_name'] = df4['time_name'].apply(fix_year)  # 修正year
+        df4['date'] = pd.to_datetime(df4['time_name'], format='%Y年%m月')
+
+        # 利率
+        df5 = pd.read_sql("SELECT period, rate as `五大銀行平均房貸利率(%)` FROM mortgage_interest_rates", conn)
+        df5['date'] = df5['period'].apply(fix_period_mortgage)
+        df5['date'] = pd.to_datetime(df5['date'], format='%Y-%m-%d')
+        df5['五大銀行平均房貸利率(%)'] = df5['五大銀行平均房貸利率(%)'].astype(float)
+
+        # 總人口數, 戶數, 戶量
+        df6 = pd.read_sql(
+            "SELECT time_name, population_count as `全台人口數(人)`, household_count as `全台戶數(戶)`, average_household_size as `全台戶量(人/戶)` FROM society_population_data",
+            conn)
+        df6['time_name'] = df6['time_name'].apply(fix_year)  # 修正year
+        df6['date'] = pd.to_datetime(df6['time_name'], format='%Y年%m月')
     finally:
         conn.close()
 
     # Merge DataFrames on date columns
     merged_df = pd.merge(df1, filtered_df2, left_on='time_name', right_on='date', how='inner')
+    merged_df = pd.merge(merged_df, df3, on='date', how='inner')
+    merged_df = pd.merge(merged_df, df4, on='date', how='inner')
+    merged_df = pd.merge(merged_df, df5, on='date', how='inner')
+    merged_df = pd.merge(merged_df, df6, on='date', how='inner', suffixes=('', '_df6'))
 
-    # make dashboard 1002
-    # numeric_vars = ['景氣信號燈', '經濟年成長率', '營建成本', '全台人口數量&戶數', '戶量(人/戶)','五大銀行平均房貸利率' ]  # 這裡的變量列表可以替換為你自己的變量列表
-    numeric_vars = ['strategy_signal', 'economic_growth_rate', 'construction cost', 'Total population','Number of households in Taiwan', 'Household size (people per household)', 'Average mortgage interest rate of the top five banks']  # 有些數據還沒有進來
+    # 使用slider篩選日期
+    # min_date = merged_df['date'].min().to_pydatetime()
+    # max_date = merged_df['date'].max().to_pydatetime()
+    # start_date, end_date = st.slider('選擇日期範圍', min_date, max_date, [min_date, max_date])
+    # filtered_df = merged_df[(merged_df['date'] >= start_date) & (merged_df['date'] <= end_date)]
+    # st.table(merged_df) 全部放在同一個table
+
+    numeric_vars = ['國泰房價指數(全國)', '營造工程總指數', '景氣信號燈', '經濟年成長率(%)', '五大銀行平均房貸利率(%)', '全台人口數(人)', '全台戶數(戶)', '全台戶量(人/戶)']
     leftcol, rightcol = st.columns([1, 1])
     with leftcol:
-        xvar = st.selectbox("X variable", numeric_vars)
+        xvar = st.selectbox("X 變量", numeric_vars)
     with rightcol:
         # yvar = st.selectbox("Y variable", numeric_vars, index=len(numeric_vars) - 6)
-        yvar = st.selectbox("Y variable", numeric_vars)
+        yvar = st.selectbox("Y 變量", numeric_vars)
 
     # 如果沒有可供繪圖的數值變量，則顯示警告並停止
     if len(numeric_vars) < 1:
         st.warning("沒有找到可供繪圖的數值列。")
         st.stop()
 
-    st.subheader('Trend Charts')
     # 兩個變量的趨勢圖
     leftcol, rightcol = st.columns([1, 1])
-    # xvar = st.selectbox("X variable", numeric_vars)
-    # yvar = st.selectbox("Y variable", numeric_vars, index=len(numeric_vars) - 1)
+
+
+    # 人口數要變Million
+    def millions_formatter(x, pos):
+        return f'{x / 1e6:.1f}M'
+
 
     with leftcol:
-        # xvar = st.selectbox("X 變量", numeric_vars)
-        # xvar = st.selectbox("X 變量", numeric_vars, key='xvar_selectbox')
         plt.figure(figsize=(10, 6))
         sns.set(rc={'axes.facecolor': '#0f1116', 'figure.facecolor': '#0f1116'})
-        sns.lineplot(x='date', y=xvar, data=merged_df)  # 替換 'YourTimeColumn' 為您的時間列名
+        ax_left = sns.lineplot(x='date', y=xvar, data=merged_df)  # 替換 'YourTimeColumn' 為您的時間列名
+        # 檢查是否繪製人口數量
+        if xvar == "全台人口數(人)" or xvar == "全台戶數(戶)":
+            ax_left.yaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
+
         plt.grid(color='white', linestyle='--', linewidth=0.5)
-        plt.title(f'{xvar} Trend Chart', color='white')
-        plt.xlabel('date', color='white')
-        plt.ylabel(yvar, color='white')
+        plt.title(f'{xvar} 趨勢圖', color='white', fontproperties=font)
+        plt.xlabel('時間', color='white', fontproperties=font)
+        plt.ylabel(xvar, color='white', fontproperties=font)
         plt.xticks(color='white')
         plt.yticks(color='white')
         st.pyplot(plt)
 
     with rightcol:
-        # yvar = st.selectbox("Y 變量", numeric_vars, index=len(numeric_vars) - 1)
-        # yvar = st.selectbox("Y 變量", numeric_vars, index=len(numeric_vars) - 1, key='yvar_selectbox')
         plt.figure(figsize=(10, 6))
         sns.set(rc={'axes.facecolor': '#0f1116', 'figure.facecolor': '#0f1116'})
-        sns.lineplot(x='date', y=yvar, data=merged_df)  # 替換 'YourTimeColumn' 為您的時間列名
+        ax_right = sns.lineplot(x='date', y=yvar, data=merged_df)  # 替換 'YourTimeColumn' 為您的時間列名
+        # 檢查是否繪製人口數量
+        if yvar == "全台人口數(人)" or yvar == "全台戶數(戶)":
+            ax_right.yaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
+
         plt.grid(color='white', linestyle='--', linewidth=0.5)
-        plt.title(f'{yvar} Trend Chart', color='white')
-        plt.xlabel('date', color='white')
-        plt.ylabel(yvar, color='white')
+        plt.title(f'{yvar} 趨勢圖', color='white', fontproperties=font)
+        plt.xlabel('時間', color='white', fontproperties=font)
+        plt.ylabel(yvar, color='white', fontproperties=font)
         plt.xticks(color='white')
         plt.yticks(color='white')
         st.pyplot(plt)
 
-    st.subheader('Correlation Chart')
-    # leftcol, rightcol = st.columns([1, 1])
+    # st.subheader('相關性關係圖表')
     leftcol, centercol, rightcol = st.columns([1.3, 3.5, 1])
     # 兩個變量的相關性圖表
     with centercol:
-        plt.figure(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(10, 6))
         sns.scatterplot(x=xvar, y=yvar, data=merged_df)
         sns.set(rc={'axes.facecolor': '#0f1116', 'figure.facecolor': '#0f1116'})
         sns.regplot(x=xvar, y=yvar, data=merged_df, scatter=False, color='red')
+
+        # 檢查x軸是否是人口數
+        if xvar == "全台人口數(人)" or xvar == "全台戶數(戶)":
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
+        # 檢查y軸是否是人口數
+        if yvar == "全台人口數(人)" or yvar == "全台戶數(戶)":
+            ax.yaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
+
         plt.xlabel(xvar)
         plt.ylabel(yvar)
         plt.gca().set_facecolor('#0f1116')
         plt.grid(color='white', linestyle='--', linewidth=0.5)
-        plt.title('Correlation', color='white')
-        plt.xlabel(xvar, color='white')
-        plt.ylabel(yvar, color='white')
+        plt.title('相關性', color='white', fontproperties=font)
+        plt.xlabel(xvar, color='white', fontproperties=font)
+        plt.ylabel(yvar, color='white', fontproperties=font)
         plt.xticks(color='white')
         plt.yticks(color='white')
         st.pyplot(plt)
+    with st.expander("如何解讀這些圖表？"):
+        st.write("""
+           「房價影響因子」頁面目的在提供一個深入探討各種因素對房價影響的平台。我們整合了來自經濟、社會和政策面的資料並且透過視覺化數據呈現，我們可以直觀地觀察這些因子如何隨時間演變，並試圖了解它們與房價之間可能的關聯。
 
+「時間趨勢圖」使使用者能夠直觀地看到各個因子隨著時間的變化趨勢，幫助我們理解這些因子在過去的歷史表現。「相關性關係圖」則展現了兩個選定因子之間的可能關聯。特別地，紅色的回歸線有助於我們揭示這些因子之間的線性關係，進一步預測它們對房價的潛在影響。
+
+當我們確定了與房價具有高度相關性的指標後，這些因子將會被整合到我們的主要儀表板中，以持續追踪其對房價的影響。這不僅讓我們能夠更加精確地掌握房價動態，更希望透過數據驅動的方法優化整個決策的過程。
+
+關於未來展望與參與方式，隨著時間的進行，我們會繼續增強資料來源和分析的深度，以提供更全面的視角。我們歡迎使用者提供寶貴的反饋和建議。
+        """)
+        user_name = st.text_input("名稱：")
+        user_email = st.text_input("電子郵件：")
+        user_feedback = st.text_area("回饋：")
+
+        if st.button("提交"):
+            GMAIL_USER = os.getenv("GMAIL_USER")
+            GMAIL_APP_PASS = os.getenv("GMAIL_APP_PASS")
+
+            # Send the feedback as an email
+            yag = yagmail.SMTP(GMAIL_USER, GMAIL_APP_PASS)
+            subject = "New Feedback from " + user_name
+            content = [f"From: {user_name} <{user_email}>", f"Feedback: {user_feedback}"]
+            yag.send(GMAIL_USER, subject, content)
+            st.success("回饋已提交，謝謝你！")
+
+    with st.expander("這些數據告訴我們哪些趨勢？"):
+        st.write('')
