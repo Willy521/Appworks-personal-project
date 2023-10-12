@@ -42,15 +42,7 @@ def update_city_column(conn):
             print("Added 'city' column to the table.")
 
         # Update city column based on address column
-        sql = """
-        UPDATE real_estate
-        SET city = CASE
-            WHEN LOCATE('市', address) > 0 THEN SUBSTRING(address, 1, LOCATE('市', address))
-            WHEN LOCATE('縣', address) > 0 THEN SUBSTRING(address, 1, LOCATE('縣', address))
-            ELSE ''
-            END;
-        """
-        cursor.execute(sql)
+        cursor.execute("UPDATE real_estate SET city = SUBSTRING(address, 1, 3);")
         conn.commit()
 
         print("City column updated successfully!")
@@ -64,8 +56,8 @@ def create_sprint3_demo_table(conn):
     try:
         cursor = conn.cursor()
         sql = """
-        CREATE TABLE IF NOT EXISTS sprint3_demo AS 
-        SELECT id, city, district, address, zoning, transaction_date, build_case, buildings_and_number 
+        CREATE TABLE IF NOT EXISTS sprint3_demo AS
+        SELECT id, city, district, address, zoning, transaction_date, build_case, buildings_and_number
         FROM real_estate;
         """
         cursor.execute(sql)
@@ -85,3 +77,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

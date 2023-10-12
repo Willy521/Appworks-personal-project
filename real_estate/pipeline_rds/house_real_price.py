@@ -32,16 +32,24 @@ def connect_to_db():
         return None  # 返回None，代表連接失敗
 
 
-def download_file_from_s3(bucket_name, object_key, file_name):
+def download_file_from_s3(bucket_name, object_key):
     s3 = boto3.client('s3')
 
+    # 將 "real_estate_price/" 從 object_key 中移除，並使用其餘部分作為文件名
+    local_file_name = object_key.replace('real_estate_price/', '')
+    local_file_path = os.path.join('real_estate_price', local_file_name)
+
+    # 確保目錄存在
+    if not os.path.exists(os.path.dirname(local_file_path)):
+        os.makedirs(os.path.dirname(local_file_path))
+
     try:
-        s3.download_file(bucket_name, object_key, file_name)
-        print(f"File downloaded from S3: {file_name}")
-        return True
+        s3.download_file(bucket_name, object_key, local_file_path)
+        print(f"File downloaded from S3 to: {local_file_path}")
+        return local_file_path
     except Exception as e:
         print(f"Error downloading file from S3: {e}")
-        return False
+        return None
 
 
 def read_csv(file_name):
@@ -68,7 +76,7 @@ def create_table(conn):
         with conn.cursor() as cursor:
             sql = """
             CREATE TABLE IF NOT EXISTS real_estate (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id INT AUTO_INCREMENT,
                 district VARCHAR(255),
                 transaction_sign VARCHAR(255),
                 address VARCHAR(255),
@@ -96,9 +104,10 @@ def create_table(conn):
                 berth_area FLOAT,
                 berth_total_price_NTD BIGINT,
                 note TEXT,
-                serial_number VARCHAR(255),
+                serial_number VARCHAR(255) NOT NULL UNIQUE,
                 build_case VARCHAR(255),
-                buildings_and_number VARCHAR(255)
+                buildings_and_number VARCHAR(255),
+                PRIMARY KEY(id)
             )
             """
             cursor.execute(sql)
@@ -110,11 +119,20 @@ def create_table(conn):
 
 def insert_data_from_csv(conn, file_name):
     try:
-        with conn.cursor() as cursor, open(file_name, newline='', encoding='utf-8') as csvfile:
-            csv_reader = csv.reader(csvfile)
-            next(csv_reader)  # skip header row
-            next(csv_reader)  # skip header row
+        data = pd.read_csv(file_name, encoding='utf-8', on_bad_lines='skip')
+        # Replace NaN values with empty string or some other value
+        data = data.fillna("NAN")
 
+        data = data.drop(data.index[0], axis=0)  # 刪除第一行 標題
+
+        # 檢查文件名中是否包含"112_3"（代表第3季），如果是則刪除最後一個column
+        print("Processing file: ", file_name)
+        if "112_3" in file_name:
+            print(data.head())
+            data = data.drop(data.columns[-1], axis=1)  # 刪除最後一個column
+            print(data.head())
+
+        with conn.cursor() as cursor:
             sql = """
             INSERT INTO real_estate (
                 district, transaction_sign, address, land_area, zoning,
@@ -158,15 +176,17 @@ def insert_data_from_csv(conn, file_name):
             build_case=VALUES(build_case),
             buildings_and_number=VALUES(buildings_and_number)
             """
-            # Collect all rows in a list
-            data_to_insert = [row for row in csv_reader]
+
+            # 將pandas dataframe的每一行轉化為tuple
+            data_to_insert = [tuple(row) for index, row in data.iterrows()]
 
             # Use executemany to insert all data at once
             cursor.executemany(sql, data_to_insert)
+
         conn.commit()
-        print(f"{file_name }Data inserted successfully")
+        print(f"{file_name} Data inserted successfully")
     except Exception as e:
-        print(f"{file_name } Error inserting data: {e}")
+        print(f"{file_name} Error inserting data: {e}")
 
 
 def main():
@@ -174,7 +194,7 @@ def main():
 
     # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
-    file_name = 'real_estate_price/last_download.csv'  # 下載後在本地保存的文件
+    # file_name = 'real_estate_price/last_download.csv'  # 下載後在本地保存的文件
 
     # 如果沒有就先創資料夾在本地
     if not os.path.exists("real_estate_price"):
@@ -234,9 +254,10 @@ def main():
 
     for object_key in object_keys:
         # S3 download
-        if download_file_from_s3(bucket_name, object_key, file_name):
-            # 如果文件下载成功，插入数据到数据库
-            insert_data_from_csv(conn, file_name)
+        downloaded_file_path = download_file_from_s3(bucket_name, object_key)
+        if downloaded_file_path:
+            # 如果文件下載成功，插入到DB
+            insert_data_from_csv(conn, downloaded_file_path)
     conn.close()
 
 
