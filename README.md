@@ -1,3 +1,6 @@
-# Feature dashboard-design_2.0
+# Feature dashboard-design_3.0
 
-Modified dashboard
+Modified dashboard:
+1. Guidline
+2. Correlation chart
+3. Trading Hotspots
