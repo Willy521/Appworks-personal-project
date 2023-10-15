@@ -1,6 +1,3 @@
-# Feature dashboard-design_3.0
+# Feature airflow setting
 
-Modified dashboard:
-1. Guidline
-2. Correlation chart
-3. Trading Hotspots
+Create an automatic crawl system by using docker and airflow.
