@@ -1,5 +1,10 @@
-# anue_wordcloud
 
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+# from airflow.airflow.operators.python.PythonOperator
+import requests
+from bs4 import BeautifulSoup
 import json
 import pymysql
 from decouple import config
@@ -10,7 +15,16 @@ import re
 import boto3
 
 
-# 連接RDS DB
+def upload_file_to_s3(file_name, bucket):
+    s3 = boto3.client('s3')
+    try:
+        s3.upload_file(file_name, bucket, file_name)  # 本地的文件路徑跟S3設為一樣
+        return True
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False
+
+
 def connect_to_db():
     password = config('DATABASE_PASSWORD')
 
@@ -28,7 +42,7 @@ def connect_to_db():
         return conn
     except Exception as e:  # 抓取所有異常，e是異常的對象
         print(f"Failed to connect to MySQL: {e}")
-        return None  # 返回None，代表連接失敗
+    return None  # 返回None，代表連接失敗
 
 
 # api 金鑰
@@ -63,14 +77,76 @@ def download_file_from_s3(bucket_name, object_key, file_name):
         return False
 
 
-def main():
+def crawl_anue():
+    # craw_anue.py
+    # 上傳到S3
+    load_dotenv()
+    base_url = 'https://news.cnyes.com'
+    url = f'{base_url}/news/cat/tw_housenews'
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        print("Failed to get the webpage.")
+        return
+
+    soup = BeautifulSoup(response.content, 'html.parser')
+    articles = soup.find_all('div', {'style': 'height:70px;'})
+
+    news_data = []
+    for i, article in enumerate(articles):
+        title = article.find('h3')
+        time = article.find('time')
+        link_tag = article.find('a', {'class': '_1Zdp'})
+
+        if title and time and link_tag:
+            print(f"{i + 1}. {title.text} ({time['datetime']})")
+
+            href = link_tag.get('href')
+            full_url = f"{base_url}{href}"
+            article_response = requests.get(full_url)
+            article_soup = BeautifulSoup(article_response.content, 'html.parser')
+            first_div = article_soup.find('div', {'class': '_2E8y'})
+            first_paragraph = first_div.find('p') if first_div else None
+
+            if first_paragraph:
+                print(f"First Paragraph: {first_paragraph.text}")
+
+                news_data.append({
+                    'id': i + 1,
+                    'title': title.text,
+                    'date': time['datetime'],
+                    'first_paragraph': first_paragraph.text
+                })
+
+    print("-------------------------------------------------------------------------------------------------------")
+
+    print(json.dumps(news_data, ensure_ascii=False, indent=4))
+
+    # Save as JSON file
+    # 在本地創建一個資料夾，將JSON file 存入資料夾並上傳到S3
+    directory = 'crawl_to_s3_file'
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    # 在資料夾內創建JSON
+    json_file_path = "crawl_to_s3_file/anue_news_data.json"
+    with open(json_file_path, 'w', encoding='utf-8') as f:
+        json.dump(news_data, f, ensure_ascii=False, indent=4)
+
+    # Upload to S3
+    bucket_name = 'appworks.personal.project'  # Replace with your bucket name
+    if upload_file_to_s3(json_file_path, bucket_name):
+        print("JSON file successfully uploaded to S3.")
+    else:
+        print("Failed to upload JSON file to S3.")
+
+
+def process_anue_data():
     openai.api_key = get_api_key()
 
     # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
     object_key = 'crawl_to_s3_file/anue_news_data.json'  # S3文件的名字
     file_name = "download_from_s3_file/anue_news_data.json"  # 本地保存的文件名
-
 
     # S3 download
     # 在本地創建一個資料夾，將JSON file 存入本地資料夾
@@ -90,13 +166,13 @@ def main():
             # 刪除表格
             cursor.execute("DROP TABLE IF EXISTS anue_news")
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS anue_news(
-                    id INT PRIMARY KEY,
-                    title VARCHAR(255),
-                    date DATETIME,
-                    first_paragraph TEXT
-                )
-            """)
+                    CREATE TABLE IF NOT EXISTS anue_news(
+                        id INT PRIMARY KEY,
+                        title VARCHAR(255),
+                        date DATETIME,
+                        first_paragraph TEXT
+                    )
+                """)
             conn.commit()
             for item in news_data:
                 # 檢查標題是否含有〈房產〉
@@ -135,7 +211,6 @@ def main():
         if ten_key_words:
             ten_key_words = ten_key_words.group(0)
             print("ten_key_words", ten_key_words)
-
             break  # 如果找到了，則跳出循環
         else:
             print("未找到期望的列表，重新請求OpenAI...")
@@ -145,11 +220,11 @@ def main():
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS keywords_table (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    keyword VARCHAR(255)
-                )
-            """)
+                    CREATE TABLE IF NOT EXISTS keywords_table (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        keyword VARCHAR(255)
+                    )
+                """)
             sql = "INSERT IGNORE INTO keywords_table (keyword) VALUES (%s)"
             cursor.execute(sql, [ten_key_words])
             conn.commit()
@@ -158,5 +233,35 @@ def main():
     conn.close()
 
 
-if __name__ == "__main__":
-    main()
+# 定義DAG和其默認參數
+default_args = {
+    'owner': 'Willy',
+    'depends_on_past': False,  # 若上一次失敗 這一次還會執行
+    'email_on_failure': True,  # 若失敗會發送email給我
+    'email_on_retry': True,  # 若設定為 True，當任務重試時將會發送郵件。
+    'retries': 1,  # 若任務失敗，會嘗試重跑的次數。
+    'retry_delay': timedelta(minutes=5),  # 重試之間的時間間隔
+}
+
+dag = DAG(
+    'anue_pipeline',  # DAG 的唯一識別碼
+    default_args=default_args,  # 上面定義的默認參數
+    description='A pipeline for crawling Anue news and processing the data.',  # DAG 的描述
+    schedule_interval=timedelta(days=1),  # DAG的執行間隔。這裡設定為每天一次
+    start_date=datetime(2023, 10, 13),  # DAG 的開始日期
+    catchup=False  # 若為 True，則當 DAG 啟動時，將會執行從 start_date 到當前日期之間的所有排程。若為 False，則只會執行最新的排程。
+)
+
+t1 = PythonOperator(
+    task_id='crawl_anue',
+    python_callable=crawl_anue,
+    dag=dag,  # 指定該任務屬於哪個 DAG。
+)
+
+t2 = PythonOperator(
+    task_id='process_anue_data',
+    python_callable=process_anue_data,
+    dag=dag,
+)
+
+t1 >> t2
