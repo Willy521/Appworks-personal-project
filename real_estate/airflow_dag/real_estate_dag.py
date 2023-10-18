@@ -147,18 +147,16 @@ def download_file_from_s3(bucket_name, object_key):
 
 
 def read_csv(file_name):
-    # 使用with语句打开文件，这样可以确保文件用完后会被正确关闭
     with open(file_name, mode='r', encoding='utf-8') as file:
-        # 创建一个CSV阅读器对象
+        # 創建一個csv reader
         csv_reader = csv.reader(file)
-
-        # 遍历CSV文件的每一行
+        # 遍歷CSV文件的每一行
         for row in csv_reader:
             print(row)  # 打印當前內容
 
 
 def read_csv_pandas(file_name):
-    # 使用pandas读取CSV文件
+    # pandas read CSV文件
     data = pd.read_csv(file_name)
 
     # 顯示前幾行數據
@@ -283,11 +281,6 @@ def insert_data_from_csv(conn, file_name):
         print(f"{file_name} Error inserting data: {e}")
 
 
-
-
-
-
-
 def crawl_real_estate():
     load_dotenv()  # S3環境變數
 
@@ -323,6 +316,26 @@ def crawl_real_estate():
         get_price_information(url, year, season)
 
 
+def get_latest_files(bucket_name, cities_prefix, year_start=112):
+    s3 = boto3.client('s3')
+    current_year = year_start
+    object_keys = []
+
+    for city in cities_prefix:
+        season = 1
+        while True:
+            potential_file = f"real_estate_price/unzipped_{current_year}_{season}/{city}_lvr_land_b.csv"
+            try:
+                # Try to head the object, if it exists then we can download it later
+                s3.head_object(Bucket=bucket_name, Key=potential_file)
+                object_keys.append(potential_file)
+                season += 1
+            except:
+                # If we can't find the file, break the loop for this city
+                break
+    return object_keys
+
+
 def process_real_estate_data():
     load_dotenv()  # 載入環境變數
 
@@ -334,50 +347,9 @@ def process_real_estate_data():
     if not os.path.exists("real_estate_price"):
         os.makedirs("real_estate_price")
 
-    #  S3 上面的資料
-    object_keys = [
-
-        # 桃園
-        'real_estate_price/unzipped_112_1/h_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/h_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/h_lvr_land_b.csv',
-
-        # 高雄
-        'real_estate_price/unzipped_112_1/e_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/e_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/e_lvr_land_b.csv',
-
-        # 台南
-        'real_estate_price/unzipped_112_1/d_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/d_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/d_lvr_land_b.csv',
-
-        # 台中
-        'real_estate_price/unzipped_112_1/b_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/b_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/b_lvr_land_b.csv',
-
-        # 台北
-        'real_estate_price/unzipped_112_1/a_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/a_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/a_lvr_land_b.csv',
-
-        # 新北
-        'real_estate_price/unzipped_112_1/f_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/f_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/f_lvr_land_b.csv',
-
-        # 新竹市
-        'real_estate_price/unzipped_112_1/o_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/o_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/o_lvr_land_b.csv',
-
-        # 新竹縣
-        'real_estate_price/unzipped_112_1/j_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_2/j_lvr_land_b.csv',
-        'real_estate_price/unzipped_112_3/j_lvr_land_b.csv'
-
-    ]
+    # 抓六都資料
+    cities_prefix = ['h', 'e', 'd', 'b', 'a', 'f', 'o', 'j']
+    object_keys = get_latest_files(bucket_name, cities_prefix)
 
     conn = connect_to_db()
     if not conn:
@@ -393,8 +365,6 @@ def process_real_estate_data():
             # 如果文件下載成功，插入到DB
             insert_data_from_csv(conn, downloaded_file_path)
     conn.close()
-
-
 
 
 # 定義DAG和其默認參數

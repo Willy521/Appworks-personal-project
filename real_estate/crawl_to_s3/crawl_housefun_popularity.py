@@ -20,6 +20,7 @@ def upload_file_to_s3(file_name, bucket, object_name=None):
         print(f"An error occurred: {e}")
         return False
 
+
 def fetch_article_content(article_url):
     base_url = "https://news.housefun.com.tw"
     full_url = f"{base_url}{article_url}"
