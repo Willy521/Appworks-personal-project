@@ -2,7 +2,6 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-# from airflow.airflow.operators.python.PythonOperator
 import requests
 from bs4 import BeautifulSoup
 import json

@@ -3,7 +3,6 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 import requests
 import os
-from datetime import datetime
 import json
 import pymysql
 from decouple import config

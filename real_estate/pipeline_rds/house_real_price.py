@@ -1,45 +1,22 @@
 # house_real_price
 
-import json
 import pymysql
 from decouple import config
 from dotenv import load_dotenv
 import os
-import re
 import boto3
 import csv
 import pandas as pd
-
-
-# 連接RDS DB
-def connect_to_db():
-    password = config('DATABASE_PASSWORD')
-
-    # 如果try 這條路徑出現異常，就會跳到except
-    try:
-        conn = pymysql.connect(
-            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-            port=3306,
-            user='admin',
-            password=password,
-            database='estate_data_hub',
-            charset='utf8mb4'
-        )
-        print("Have connected to MySQL")
-        return conn
-    except Exception as e:  # 抓取所有異常，e是異常的對象
-        print(f"Failed to connect to MySQL: {e}")
-        return None  # 返回None，代表連接失敗
+from utilities.utils import connect_to_db
 
 
 def download_file_from_s3(bucket_name, object_key):
     s3 = boto3.client('s3')
 
-    # 將 "real_estate_price/" 從 object_key 中移除，並使用其餘部分作為文件名
+    # replace "real_estate_price/" from object_key as file name
     local_file_name = object_key.replace('real_estate_price/', '')
     local_file_path = os.path.join('real_estate_price', local_file_name)
 
-    # 確保目錄存在
     if not os.path.exists(os.path.dirname(local_file_path)):
         os.makedirs(os.path.dirname(local_file_path))
 
@@ -54,19 +31,13 @@ def download_file_from_s3(bucket_name, object_key):
 
 def read_csv(file_name):
     with open(file_name, mode='r', encoding='utf-8') as file:
-        # CSV reader
         csv_reader = csv.reader(file)
-
-        # CSV文件的每一行
         for row in csv_reader:
-            print(row)  # 打印當前內容
+            print(row)
 
 
 def read_csv_pandas(file_name):
-    # pandas read CSV文件
     data = pd.read_csv(file_name)
-
-    # 顯示前幾行數據
     print(data.head())
 
 
@@ -188,7 +159,7 @@ def insert_data_from_csv(conn, file_name):
         print(f"{file_name} Error inserting data: {e}")
 
 
-# 抓取最新的file
+# get latest file
 def get_latest_files(bucket_name, cities_prefix, year_start=112):
     s3 = boto3.client('s3')
     current_year = year_start

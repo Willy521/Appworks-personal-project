@@ -1,42 +1,14 @@
-# anue_wordcloud
-
-import json
-import pymysql
 from decouple import config
-from dotenv import load_dotenv
 import openai
-import os
 import re
-import boto3
+from pipeline_utilities import download_and_print_json_from_s3
+from utilities.utils import connect_to_db
 
 
-# 連接RDS DB
-def connect_to_db():
-    password = config('DATABASE_PASSWORD')
-
-    # 如果try 這條路徑出現異常，就會跳到except
-    try:
-        conn = pymysql.connect(
-            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-            port=3306,
-            user='admin',
-            password=password,
-            database='estate_data_hub',
-            charset='utf8mb4'
-        )
-        print("Have connected to MySQL")
-        return conn
-    except Exception as e:  # 抓取所有異常，e是異常的對象
-        print(f"Failed to connect to MySQL: {e}")
-        return None  # 返回None，代表連接失敗
-
-
-# api 金鑰
 def get_api_key():
-    load_dotenv()
-    api_key = os.environ.get('OPENAI_API_KEY')
+    api_key = config('DATABASE_PASSWORD')
     if not api_key:
-        raise ValueError("API key are not be set.")  # 如果沒有API就停止接下來的動作
+        raise ValueError("API key are not be set.")
     return api_key
 
 
@@ -51,43 +23,13 @@ def call_chagpt(prompt):
     return completion['choices'][0]['message']['content']
 
 
-def download_file_from_s3(bucket_name, object_key, file_name):
-    s3 = boto3.client('s3')
-
-    try:
-        s3.download_file(bucket_name, object_key, file_name)
-        print(f"File downloaded from S3: {file_name}")
-        return True
-    except Exception as e:
-        print(f"Error downloading file from S3: {e}")
-        return False
-
-
-def main():
-    openai.api_key = get_api_key()
-
-    # 定義S3的桶名，對象key和要保存的文件名
-    bucket_name = 'appworks.personal.project'
-    object_key = 'crawl_to_s3_file/anue_news_data.json'  # S3文件的名字
-    file_name = "download_from_s3_file/anue_news_data.json"  # 本地保存的文件名
-
-
-    # S3 download
-    # 在本地創建一個資料夾，將JSON file 存入本地資料夾
-    directory = "download_from_s3_file"
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    download_file_from_s3(bucket_name, object_key, file_name)
-    with open(file_name, 'r', encoding='utf-8') as f:
-        news_data = json.load(f)
-        formatted_json = json.dumps(news_data, ensure_ascii=False, indent=4)
-        print(formatted_json)
-
+def store_anue_news(news_data):
     conn = connect_to_db()
+    if not conn:
+        print("Failed to establish a database connection.")
+        return
     try:
         with conn.cursor() as cursor:
-            # 刪除表格
             cursor.execute("DROP TABLE IF EXISTS anue_news")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS anue_news(
@@ -99,9 +41,7 @@ def main():
             """)
             conn.commit()
             for item in news_data:
-                # 檢查標題是否含有〈房產〉
                 if '〈房產〉' in item['title']:
-                    # 如果含有〈房產〉，則執行插入操作
                     sql = "INSERT IGNORE INTO anue_news (id, title, date, first_paragraph) VALUES (%s, %s, %s, %s)"
                     cursor.execute(sql, (item['id'], item['title'], item['date'], item['first_paragraph']))
             print("have inserted")
@@ -112,50 +52,72 @@ def main():
         if conn:
             conn.close()
 
-    # 第一次請 openai 將每一則新聞整理出兩句話(尚未給關鍵字)
+
+def get_keywords_from_anue_news(news_data):
+    """Processes news data and returns a list of representative keywords using OpenAI."""
+
+    # Firstly, request OpenAI to organize two sentences
     first_time_sentences = []
     for item in news_data:
         prompt = f"以下是一則新聞的 title 和第一段文章，幫我用繁體中文整理給我1句話{item['title']}。{item['first_paragraph']}。"
         first_time_sentences.append(call_chagpt(prompt))
     print("first_time_sentences", first_time_sentences)
 
-    # 第二次 openai 挑出關鍵句子
+    # Secondly, request OpenAI to respond with a key sentence or keyword
     prompt_1 = f"幫我從這個 list {first_time_sentences} 仔細審查每個句子，濃縮成10個具有代表性描述的名詞或短句(每一句10字以內)，請把10個結果裝在一個list的形式給我。我要做文字雲讓觀看者可以一眼知道最近的話題"
 
-    # 開始一個無窮循環
     while True:
         keywords_list = call_chagpt(prompt_1)
         print("keywords_list", keywords_list)
 
-        # 使用正則表達式找到所有關鍵字
-        ten_key_words = re.search(r'\[(.*?)\]', keywords_list)
-        print("ten_key_words", ten_key_words)
+        # Regular expression
+        ten_key_words_match = re.search(r'\[(.*?)\]', keywords_list)
+        print("ten_key_words", ten_key_words_match)
 
-        # 檢查是否獲得了期望的列表
-        if ten_key_words:
-            ten_key_words = ten_key_words.group(0)
+        if ten_key_words_match:
+            ten_key_words = ten_key_words_match.group(0)
             print("ten_key_words", ten_key_words)
-
-            break  # 如果找到了，則跳出循環
+            return ten_key_words
         else:
-            print("未找到期望的列表，重新請求OpenAI...")
+            print("Expected list not found, making a new request to OpenAI...")
 
-    # 將結果插入到DB
+
+def store_keywords(ten_key_words):
     conn = connect_to_db()
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS keywords_table (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    keyword VARCHAR(255)
-                )
-            """)
+                    CREATE TABLE IF NOT EXISTS keywords_table (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        keyword VARCHAR(255)
+                    )
+                """)
             sql = "INSERT IGNORE INTO keywords_table (keyword) VALUES (%s)"
             cursor.execute(sql, [ten_key_words])
             conn.commit()
     except Exception as e:
         print(f"發生錯誤: {e}")
     conn.close()
+
+
+def main():
+    openai.api_key = get_api_key()
+
+    directory = "download_from_s3_file"  # create directory
+    bucket_name = 'appworks.personal.project'
+    object_key = 'crawl_to_s3_file/anue_news_data.json'  # download from
+    file_name = "download_from_s3_file/anue_news_data.json"  # local path
+
+    news_data = download_and_print_json_from_s3(directory, bucket_name, object_key, file_name)
+
+    # store anue news
+    store_anue_news(news_data)
+
+    # generate keywords
+    ten_key_words = get_keywords_from_anue_news(news_data)
+
+    # store keywords
+    store_keywords(ten_key_words)
 
 
 if __name__ == "__main__":

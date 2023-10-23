@@ -383,7 +383,7 @@ if add_radio == "全台整體房市交易狀況":
     finally:
         conn.close()
 
-    # 把 list_string 转换成一个 Python 列表
+    # 把 list_string 轉换成一个 Python 列表
     if keyword_string:
         keyword_list = [x.strip("'") for x in keyword_string.strip("[]").split(", ")]
     else:
@@ -393,7 +393,7 @@ if add_radio == "全台整體房市交易狀況":
     wordcloud = WordCloud(font_path='./PingFang.ttc',  # 指定中文字体的路径 ./real_estate/PingFang.ttc
                           width=800, height=400, background_color='#0f1116').generate(' '.join(keyword_list))
 
-    print(keyword_list)  # 查看关键词列表是否为空
+    print(keyword_list)  # 查看keywords列表是否为空
     print(wordcloud)  # 查看wordcloud对象
 
     # 画图
