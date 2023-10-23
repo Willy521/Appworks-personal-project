@@ -37,7 +37,7 @@ jobs:
         username: ec2-user
         key: ${{ secrets.EC2_PEM }}
         script: |
-          scp -i "${{ secrets.EC2_PEM }}" -r ./dashboard.py ec2-user@${{ secrets.HOST_IP }}:/home/ec2-user/
+          scp ./dashboard.py ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/
 
     # Step 4: Remove Github Actions IP from security group
     - name: Remove Github Actions IP from security group
