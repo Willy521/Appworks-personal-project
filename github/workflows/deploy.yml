@@ -1,25 +1,57 @@
-name: Deploy to EC2
+name: CI/CD Pipeline Deploy to AWS EC2
 
+run-name: ${{ github.actor }} | Deploy to AWS/EC2
 on:
   push:
+    branches:
+      - feature/CICD
+  pull_request:
     branches:
       - develop
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
+    # Step 1: Checkout the repo
+    - name: Checkout to repo
       uses: actions/checkout@v2
 
-    - name: Copy files to EC2
+    # Step 2: Get Github action IP
+    - name: Get Github action IP
+      id: ip
+      uses: haythem/public-ip@v1.2
+
+    # Step 3: Add Github Actions IP to Security group
+    - name: Add Github Actions IP to Security group
+      run:
+        aws ec2 authorize-security-group-ingress --group-name ${{ secrets.AWS_SG_NAME }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
       env:
-        PRIVATE_KEY: ${{ secrets.EC2_PEM }}
-        HOST: ${{ secrets.EC2_HOST }}
-        USER: ${{ secrets.EC2_USER }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+
+    # Step 4: Deploy dashboard.py to the EC2 instance
+    - name: Deploy to EC2 instance
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST_IP }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_PEM }}
+        script: |
+          scp -i "${{ secrets.EC2_PEM }}" -r ./dashboard.py ec2-user@${{ secrets.HOST_IP }}:/home/ec2-user/
+
+    # Step 5: Remove Github Actions IP from security group
+    - name: Remove Github Actions IP from security group
       run: |
-        echo "$PRIVATE_KEY" > private_key.pem
-        chmod 600 private_key.pem
-        scp -i private_key.pem -r ./dashboard.py $USER@$HOST:/home/ec2-user/
-        rm -f private_key.pem
+        aws ec2 revoke-security-group-ingress --group-name ${{ secrets.AWS_SG_NAME }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      if: always()
+
+    # Step 6: Post-deployment notification
+    - name: Post-deployment notification
+      run: echo "Deploy ${{ job.status }}."
+      if: always()
