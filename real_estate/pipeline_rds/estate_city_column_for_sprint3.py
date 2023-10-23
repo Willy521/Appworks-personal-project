@@ -1,31 +1,11 @@
-# estate_city_column_for_sprint3
-
-import pymysql
 from dotenv import load_dotenv
+import pymysql
 from decouple import config
+from utilities.utils import connect_to_db
 
-# 環境變數
 load_dotenv()
 password = config('DATABASE_PASSWORD')
 password_bytes = password.encode('utf-8')
-
-
-# connect to db
-def connect_db():
-    try:
-        conn = pymysql.connect(
-            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-            port=3306,
-            user='admin',
-            password=password_bytes,
-            database='estate_data_hub',
-            charset='utf8mb4'
-        )
-        print("Have connected to db")
-        return conn
-    except Exception as e:
-        print(f"error: {e}")
-        return None
 
 
 def update_city_column(conn):
@@ -47,7 +27,6 @@ def update_city_column(conn):
 
         print("City column updated successfully!")
         cursor.close()
-
     except Exception as e:
         print(f"Error while updating city column: {e}")
 
@@ -68,7 +47,7 @@ def create_sprint3_demo_table(conn):
 
 
 def main():
-    conn = connect_db()
+    conn = connect_to_db()
     if conn:
         update_city_column(conn)
         create_sprint3_demo_table(conn)

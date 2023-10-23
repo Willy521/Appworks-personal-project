@@ -8,7 +8,6 @@ import pymysql
 from decouple import config
 from dotenv import load_dotenv
 import os
-import re
 import boto3
 import csv
 import pandas as pd

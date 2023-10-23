@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 import requests
-from datetime import datetime
 import json
 import pymysql
 from decouple import config
