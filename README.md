@@ -1,4 +1,3 @@
-# Refactor and Test
+# CICD Design
 
-* Use utilities file to import function.
-* Add unittest and integration test.
+* CICD Test
