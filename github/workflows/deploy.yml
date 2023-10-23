@@ -16,13 +16,11 @@ jobs:
     # Step 1: Checkout the repo
     - name: Checkout to repo
       uses: actions/checkout@v2
-
-    # Step 2: Get Github action IP
     - name: Get Github action IP
       id: ip
       uses: haythem/public-ip@v1.2
 
-    # Step 3: Add Github Actions IP to Security group
+    # Step 2: Add Github Actions IP to Security group
     - name: Add Github Actions IP to Security group
       run:
         aws ec2 authorize-security-group-ingress --group-name ${{ secrets.AWS_SG_NAME }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
@@ -31,17 +29,17 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
-    # Step 4: Deploy dashboard.py to the EC2 instance
+    # Step 3: Deploy dashboard.py to the EC2 instance
     - name: Deploy to EC2 instance
       uses: appleboy/ssh-action@master
       with:
-        host: ${{ secrets.HOST_IP }}
+        host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_PEM }}
         script: |
           scp -i "${{ secrets.EC2_PEM }}" -r ./dashboard.py ec2-user@${{ secrets.HOST_IP }}:/home/ec2-user/
 
-    # Step 5: Remove Github Actions IP from security group
+    # Step 4: Remove Github Actions IP from security group
     - name: Remove Github Actions IP from security group
       run: |
         aws ec2 revoke-security-group-ingress --group-name ${{ secrets.AWS_SG_NAME }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
@@ -51,7 +49,7 @@ jobs:
         AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
       if: always()
 
-    # Step 6: Post-deployment notification
+    # Step 5: Post-deployment notification
     - name: Post-deployment notification
       run: echo "Deploy ${{ job.status }}."
       if: always()
