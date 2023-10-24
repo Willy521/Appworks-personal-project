@@ -35,9 +35,11 @@ jobs:
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ec2-user
-        key: ${{ secrets.EC2_PEM }}
+        key: ${{ secrets.SSH_KEY }}
         script: |
-          scp ./dashboard.py ec2-user@${{ secrets.EC2_HOST }}:/home/ec2-user/
+          cd  /home/ec2-user/CICD
+          git stash
+          git pull origin develop
 
     # Step 4: Remove Github Actions IP from security group
     - name: Remove Github Actions IP from security group
