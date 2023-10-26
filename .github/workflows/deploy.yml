@@ -40,7 +40,7 @@ jobs:
         script: |
           cd  /home/ec2-user/CICD
           git stash
-          git pull upstream develop
+          git pull upstream feature/CICD
 
     # Step 4: Remove Github Actions IP from security group
     - name: Remove Github Actions IP from security group
