@@ -1,48 +1,41 @@
-# 10/23-7
 import streamlit as st
 st.set_page_config(
     page_title="Estate Data Hub",
     layout="wide",
 )
-from datetime import datetime
-from wordcloud import WordCloud
-from dotenv import load_dotenv
-from decouple import config
+from streamlit_autorefresh import st_autorefresh
 import matplotlib.font_manager as fm
-import pydeck as pdk
-import altair as alt
-from geopy.geocoders import Nominatim
-import folium
-from folium import Map, Marker
-from geopy.geocoders import Nominatim
-from streamlit_folium import folium_static
-import seaborn as sns
-import plotly.express as px
-import plotly.graph_objects as go
 import matplotlib.ticker as ticker
-import yagmail
-import os
+import plotly.graph_objects as go
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from dotenv import load_dotenv
+from datetime import datetime
+import plotly.express as px
+from decouple import config
 import streamlit as st
+import seaborn as sns
 import pandas as pd
 import pymysql
-import matplotlib.pyplot as plt
+import yagmail
 import hashlib
-from streamlit_autorefresh import st_autorefresh
+import os
+from utilities.utils import connect_to_db
 
-# 環境變數
+
 load_dotenv()
 password = config('DATABASE_PASSWORD')
 password_bytes = password.encode('utf-8')
-
-# # 中文字體路徑
 font_path = "./PingFang.ttc"
 font = fm.FontProperties(fname=font_path)
 
 # dashboard daily update
-st_autorefresh(interval=24 * 60 * 60 * 1000, key="dailyrefresh")  # 每1天更新一次dashboard
+st_autorefresh(interval=24 * 60 * 60 * 1000, key="dailyrefresh")  # daily update the dashboard
 
 
 # connect to db
+# connect_to_db()
+
 def connect_db():
     try:
         conn = pymysql.connect(
@@ -221,8 +214,8 @@ if add_radio == "全台整體房市交易狀況":
 - 觀點四：從長期來看，利率與房地產存在強烈的正相關性。然而，即使最近央行實行了多次升息，與歷史相比，利率仍然維持在2-3%的低位。
         """)
 
-    st.header('全國房屋指數(國泰房價指數)')
 
+    st.header('全國房屋指數(國泰房價指數)')
     # 函數將民國轉換為西元
     def convert_to_ad(period):
         # 從 period 中提取年份 (前三個字符) 並轉換為整數
@@ -364,7 +357,6 @@ if add_radio == "全台整體房市交易狀況":
                 - 近期觀點：從數據可以看出在平均地權條利當中的預售屋禁止轉約在2023年7月之後執行後的影響，政策造成了民眾為了保有買賣房屋的彈性而導致7月的交易量大幅增加。由於是首次限制民眾買賣房屋的自由，未來必須持續追蹤平均地權條例所帶來的影響。
             """)
 
-
     except Exception as e:
         st.error(f"錯誤: {e}")
 
@@ -412,7 +404,6 @@ if add_radio == "全台整體房市交易狀況":
 
 # Trading Hotspots
 elif add_radio == "區域交易熱點分析":
-
     def compute_hash(data):
         return hashlib.sha256(str(data).encode()).hexdigest()
 
@@ -438,7 +429,6 @@ elif add_radio == "區域交易熱點分析":
 
     # 從快取中加載數據
     data = load_data(selected_city)
-
 
     # 將 交易年月日 轉換為西元年
     def convert_to_ad(date_str):
@@ -480,10 +470,10 @@ elif add_radio == "區域交易熱點分析":
         height=500,
         width=1100,
         xaxis_title="時間",
-        yaxis_title="戶",
-        plot_bgcolor='#0f1116',  # 背景色
-        paper_bgcolor='#0f1116',  # 畫布背景色
-        font=dict(color='white')  # 文字顏色
+        yaxis_title="成交戶",
+        plot_bgcolor='#0f1116',
+        paper_bgcolor='#0f1116',
+        font=dict(color='white')
     )
 
     st.plotly_chart(fig)
@@ -510,7 +500,7 @@ elif add_radio == "區域交易熱點分析":
         height=500,
         width=1200,
         xaxis_title="時間",
-        yaxis_title="戶",
+        yaxis_title="成交戶",
         plot_bgcolor='#0f1116',  # 背景色
         paper_bgcolor='#0f1116',  # 畫布背景色
         font=dict(color='white')  # 文字顏色
@@ -520,7 +510,6 @@ elif add_radio == "區域交易熱點分析":
     st.plotly_chart(fig)
 
     # 圓餅圖表示各個建案的交易次數佔比
-
     # 基於所選的城市，提供區域的下拉式選單
     districts = df['鄉鎮市區'].unique()
     selected_district = st.selectbox(f'選擇 {selected_city} 的區域', options=districts.tolist())
@@ -531,10 +520,16 @@ elif add_radio == "區域交易熱點分析":
     pie_df = district_filtered_df.groupby('建案名稱').size().reset_index(name='交易次數')
     pie_df = pie_df.sort_values('交易次數', ascending=False)
 
-    pie_fig = px.pie(pie_df, values='交易次數', names='建案名稱')
+    # 找出小於2%的建案並合併成"其他"
+    threshold = 0.01
+    total_transactions = pie_df['交易次數'].sum()
+    pie_df['建案名稱'] = pie_df.apply(lambda row: row['建案名稱'] if row['交易次數'] / total_transactions >= threshold else '其他',
+                                  axis=1)
 
-    # pie_fig.update_traces(domain=dict(x=[0.25, 0.75], y=[0.25, 0.75]))
-    # pie_fig.update_traces(domain=dict(x=[0.2, 0.85], y=[0.2, 0.85]))
+    # 合併相同建案名稱的行，計算交易次數總和
+    pie_df = pie_df.groupby('建案名稱').sum().reset_index()
+
+    pie_fig = px.pie(pie_df, values='交易次數', names='建案名稱')
 
     pie_fig.update_layout(
         height=600,
@@ -542,18 +537,14 @@ elif add_radio == "區域交易熱點分析":
         font=dict(color='white'),  # 文字顏色
         plot_bgcolor='#0f1116',  # 背景色
         paper_bgcolor='#0f1116',  # 畫布背景色
-
     )
 
     # 在streamlit上顯示圓餅圖
     st.plotly_chart(pie_fig)
 
-elif add_radio == "房市影響因子":
-    st.title('房價影響因子')
-    st.subheader('時間趨勢 & 相關性關係圖')
-    conn = connect_db()
 
-    # 格式轉換
+elif add_radio == "房市影響因子":
+    # "109年08月" -> "YYYY年MM月"
     def fix_year(date_str):
         year, month = date_str.split('年', 1)
         year = int(year)
@@ -561,7 +552,7 @@ elif add_radio == "房市影響因子":
             year += 1911
         return f"{year}年{month}"
 
-    # 格式轉換
+    # "109Q3" -> "YYYY-MM-01"
     def fix_period(period_str):
         year, quarter = period_str.split('Q')
         year = int(year)
@@ -576,7 +567,7 @@ elif add_radio == "房市影響因子":
         }
         return f"{year}-{month_map[quarter]}-01"
 
-    # 格式轉換
+    # "109/08" -> "YYYY-MM-01"
     def fix_period_mortgage(period_str):
         year, month = period_str.split('/')
         year = int(year)
@@ -584,6 +575,10 @@ elif add_radio == "房市影響因子":
             year += 1911
         return f"{year}-{month}-01"
 
+    st.title('房價影響因子')
+    st.subheader('時間趨勢 & 相關性關係圖')
+    table = "房市影響因子"
+    conn = connect_to_db(table)
 
     try:
         # Read the first DataFrame
@@ -606,24 +601,24 @@ elif add_radio == "房市影響因子":
                                      errors='coerce')
         filtered_df2 = df2[df2['經濟年成長率(%)'] != 0]
 
-        # 國泰房屋指數
+        # "國泰房屋指數"
         df3 = pd.read_sql("SELECT period, index_value as `國泰房價指數(全國)` FROM house_cathay_index WHERE city = '全國'",
                           conn)
         df3['date'] = df3['period'].apply(fix_period)
         df3['date'] = pd.to_datetime(df3['date'], format='%Y-%m-%d')
 
-        # 營造指數
+        # "營造指數"
         df4 = pd.read_sql("SELECT time_name, construction_index as `營造工程總指數` FROM economic_construction_cost", conn)
         df4['time_name'] = df4['time_name'].apply(fix_year)  # 修正year
         df4['date'] = pd.to_datetime(df4['time_name'], format='%Y年%m月')
 
-        # 利率
+        # "利率"
         df5 = pd.read_sql("SELECT period, rate as `五大銀行平均房貸利率(%)` FROM mortgage_interest_rates", conn)
         df5['date'] = df5['period'].apply(fix_period_mortgage)
         df5['date'] = pd.to_datetime(df5['date'], format='%Y-%m-%d')
         df5['五大銀行平均房貸利率(%)'] = df5['五大銀行平均房貸利率(%)'].astype(float)
 
-        # 總人口數, 戶數, 戶量
+        # "總人口數, 戶數, 戶量"
         df6 = pd.read_sql(
             "SELECT time_name, population_count as `全台人口數(人)`, household_count as `全台戶數(戶)`, average_household_size as `全台戶量(人/戶)` FROM society_population_data",
             conn)
@@ -647,16 +642,14 @@ elif add_radio == "房市影響因子":
         # yvar = st.selectbox("Y variable", numeric_vars, index=len(numeric_vars) - 6)
         yvar = st.selectbox("Y 變量", numeric_vars)
 
-    # 如果沒有可供繪圖的數值變量，則顯示警告並停止
     if len(numeric_vars) < 1:
         st.warning("沒有找到可供繪圖的數值列。")
         st.stop()
 
-    # 兩個變量的趨勢圖
+    # trend charts
     leftcol, rightcol = st.columns([1, 1])
 
-
-    # 人口數要變Million
+    # Million
     def millions_formatter(x, pos):
         return f'{x / 1e6:.1f}M'
 
@@ -681,7 +674,6 @@ elif add_radio == "房市影響因子":
         plt.figure(figsize=(10, 6))
         sns.set(rc={'axes.facecolor': '#0f1116', 'figure.facecolor': '#0f1116'})
         ax_right = sns.lineplot(x='date', y=yvar, data=merged_df)  # 替換 'YourTimeColumn' 為您的時間列名
-        # 檢查是否繪製人口數量
         if yvar == "全台人口數(人)" or yvar == "全台戶數(戶)":
             ax_right.yaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
 
@@ -695,17 +687,15 @@ elif add_radio == "房市影響因子":
 
     # st.subheader('相關性關係圖表')
     leftcol, centercol, rightcol = st.columns([1.3, 3.5, 1])
-    # 兩個變量的相關性圖表
+    # correlation chart
     with centercol:
         fig, ax = plt.subplots(figsize=(10, 6))
         sns.scatterplot(x=xvar, y=yvar, data=merged_df)
         sns.set(rc={'axes.facecolor': '#0f1116', 'figure.facecolor': '#0f1116'})
         sns.regplot(x=xvar, y=yvar, data=merged_df, scatter=False, color='red')
 
-        # 檢查x軸是否是人口數
         if xvar == "全台人口數(人)" or xvar == "全台戶數(戶)":
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
-        # 檢查y軸是否是人口數
         if yvar == "全台人口數(人)" or yvar == "全台戶數(戶)":
             ax.yaxis.set_major_formatter(ticker.FuncFormatter(millions_formatter))
         plt.xlabel(xvar)
@@ -718,17 +708,15 @@ elif add_radio == "房市影響因子":
         plt.xticks(color='white')
         plt.yticks(color='white')
         st.pyplot(plt)
-    # 計算並顯示相關係數在右邊欄位
+
     correlation_coefficient = merged_df[xvar].corr(merged_df[yvar])
     with rightcol:
-        st.write("\n")  # 使用換行來添加空間
+        st.write("\n")
         st.write("\n")
         st.write("\n")
         st.write("\n")
         st.write(f"相關係數: {correlation_coefficient:.2f}")
     with st.expander("如何解讀這些圖表？"):
-        # st.markdown("<h5 style='text-align: left; color: white;'>房價影響因子探討</h5>", unsafe_allow_html=True)
-
         st.write("""
         房價影響因子頁面旨在深入研究各類因素對房價的影響。我們集結了經濟、社會及政策方面的資料，並透過資料視覺化呈現，讓使用者能直接洞察這些因子如何隨著時間變化，以及它們與房價的可能關聯。
         * 時間趨勢圖：讓使用者明確看見各因子隨時間的演變，助於了解其歷史表現。
@@ -737,8 +725,12 @@ elif add_radio == "房市影響因子":
         """)
 
     with st.expander("這些數據告訴我們哪些趨勢？"):
-        st.write('(尚未更新)')
-
+        st.write("""
+    根據目前資料庫的數據，我們進行了時間趨勢以及相關性分析，以獲得有關房價的重要資訊。根據分析結果，我們也選擇了與房價最具關聯的前四大因子，並將它們置於儀表板首頁，以供用戶即時追蹤。
+    - 觀點一：營造工程指數與國泰房價指數具有高相關性，並且領先它半年到一年半。這種高相關性和領先關係表明，營造工程指數可以被視為預測國泰房價指數的一個有用指標。當營造工程指數上升時，可能預示著未來房價上升的趨勢。
+    - 觀點二：台灣的每戶人口與國泰房價指數有高度負相關，以目前台灣人口數目沒有明顯下降的情況，顯示台灣房地產市場的需求動能仍然相對穩定。這種負相關性可能反映了台灣家庭結構的變化，越來越多的家庭選擇小型住房，如公寓或小型公寓，以適應現代生活方式。這種趨勢可能受到年輕人和單身家庭的偏好影響，他們更傾向於選擇較小的住房空間，而不是傳統的大型住宅。
+    - 觀點三：房貸利率與國泰房價指數呈現負相關，代表當房貸利率下降時，國泰房價指數可能上升，反之亦然。這種負相關性意味著房地產市場中的買家更可能購買房屋，因為他們可以以更低的利率獲得貸款，這可能會推高房價。儘管最近央行已經開始提升利率，但與歷史相比，利率仍然處於相對低位，這仍然有助於支持房地產市場。
+            """)
     st.divider()
     st.subheader('未來展望及使用者參與模式')
     st.write("""隨著研究的深化，我們將不斷擴展資料來源並加深分析，期望為您提供更全面的視角。我們也熱烈期待使用者的參與，共同探索房價的潛在影響因子。""")
@@ -756,5 +748,3 @@ elif add_radio == "房市影響因子":
         content = [f"From: {user_name} <{user_email}>", f"Feedback: {user_feedback}"]
         yag.send(GMAIL_USER, subject, content)
         st.success("回饋已提交，謝謝你！")
-
-
