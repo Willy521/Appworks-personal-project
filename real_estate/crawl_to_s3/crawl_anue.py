@@ -1,33 +1,18 @@
-# craw_anue.py
-
-import json
-import requests
-from bs4 import BeautifulSoup
-import boto3
-import os
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+import requests
+import logging
+import json
+import os
+from crawl_utilities import upload_to_s3, save_data_to_json_file
 
 
-# 上傳到S3
-def upload_file_to_s3(file_name, bucket):
-    s3 = boto3.client('s3')
-    try:
-        s3.upload_file(file_name, bucket, file_name)  # 本地的文件路徑跟S3設為一樣
-        return True
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return False
-
-
-def main():
-    load_dotenv()
-    base_url = 'https://news.cnyes.com'
-    url = f'{base_url}/news/cat/tw_housenews'
-    response = requests.get(url)
-
+# crawl_news_data
+def fetch_news_data(news_category_url, base_url):
+    response = requests.get(news_category_url)
     if response.status_code != 200:
-        print("Failed to get the webpage.")
-        return
+        logging.error("Failed to get the news_data webpage.")
+        return []
 
     soup = BeautifulSoup(response.content, 'html.parser')
     articles = soup.find_all('div', {'style': 'height:70px;'})
@@ -39,8 +24,7 @@ def main():
         link_tag = article.find('a', {'class': '_1Zdp'})
 
         if title and time and link_tag:
-            print(f"{i + 1}. {title.text} ({time['datetime']})")
-
+            # print(f"{i + 1}. {title.text} ({time['datetime']})")
             href = link_tag.get('href')
             full_url = f"{base_url}{href}"
             article_response = requests.get(full_url)
@@ -49,36 +33,41 @@ def main():
             first_paragraph = first_div.find('p') if first_div else None
 
             if first_paragraph:
-                print(f"First Paragraph: {first_paragraph.text}")
-
+                # print(f"First Paragraph: {first_paragraph.text}")
                 news_data.append({
                     'id': i + 1,
                     'title': title.text,
                     'date': time['datetime'],
                     'first_paragraph': first_paragraph.text
                 })
+    return news_data
 
-    print("-------------------------------------------------------------------------------------------------------")
 
-    print(json.dumps(news_data, ensure_ascii=False, indent=4))
-
-    # Save as JSON file
-    # 在本地創建一個資料夾，將JSON file 存入資料夾並上傳到S3
+def main():
+    load_dotenv()
+    base_url = 'https://news.cnyes.com'
+    news_category_url = f'{base_url}/news/cat/tw_housenews'
     directory = 'crawl_to_s3_file'
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    # 在資料夾內創建JSON
-    json_file_path = "crawl_to_s3_file/anue_news_data.json"
-    with open(json_file_path, 'w', encoding='utf-8') as f:
-        json.dump(news_data, f, ensure_ascii=False, indent=4)
+    file_name = "anue_news_data.json"
+    bucket_name = 'appworks.personal.project'
+
+    # fetch news data
+    news_data = fetch_news_data(news_category_url, base_url)
+    if news_data:
+        logging.info("Fetch news data successfully")
+        print(json.dumps(news_data, ensure_ascii=False, indent=4))
+
+    # save it to a json file
+    save_data_to_json_file(news_data, directory, file_name)
 
     # Upload to S3
-    bucket_name = 'appworks.personal.project'  # Replace with your bucket name
-    if upload_file_to_s3(json_file_path, bucket_name):
-        print("JSON file successfully uploaded to S3.")
+    json_file_path = os.path.join(directory, file_name)
+    if upload_to_s3(json_file_path, bucket_name):
+        logging.info("News data JSON file successfully uploaded to S3.")
     else:
-        print("Failed to upload JSON file to S3.")
+        logging.error("News data failed to upload JSON file to S3.")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(filename='crawl.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     main()

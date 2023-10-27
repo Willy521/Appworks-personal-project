@@ -1,30 +1,15 @@
-# house_fun_popularity
-
-import requests
 from bs4 import BeautifulSoup
+import requests
 import json
 import os
-import boto3
+from crawl_utilities import upload_to_s3
 
-
-def upload_file_to_s3(file_name, bucket, object_name=None):
-    s3 = boto3.client('s3')
-
-    if object_name is None:
-        object_name = file_name
-
-    try:
-        s3.upload_file(file_name, bucket, object_name)
-        return True
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return False
 
 def fetch_article_content(article_url):
     base_url = "https://news.housefun.com.tw"
     full_url = f"{base_url}{article_url}"
 
-    # 掛header
+    # header
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.3"
     }
@@ -47,7 +32,6 @@ def fetch_article_content(article_url):
 
 def main():
     search_url = 'https://news.housefun.com.tw/news/顏炳立/?od=0&osc=1'
-
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.3"
     }
@@ -80,14 +64,11 @@ def main():
 
             articles.append(article_info)
 
-            # 如果你仍想在終端機中看到這些信息，你可以保留以下的 print 語句
             print(f"Article title: {title}")
             print(f"Article date: {date}")
             print(f"Article content: {content[:100]}...")  # 只打印文章的前100個字符作為預覽
 
     print("-------------------------------------------------------------------------------------------------------")
-
-    # 存到S3
 
     json_file_path = 'crawl_to_s3/housefun_popularity_data.json'
 
@@ -96,12 +77,12 @@ def main():
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    # 寫入
+    # write
     with open(json_file_path, 'w', encoding='utf-8') as f:
         json.dump(articles, f, ensure_ascii=False, indent=4)
 
     # Upload JSON file to S3
-    if upload_file_to_s3(json_file_path, 'appworks.personal.project'):
+    if upload_to_s3(json_file_path, 'appworks.personal.project'):
         print("JSON file successfully uploaded to S3.")
     else:
         print("Failed to upload JSON file to S3.")

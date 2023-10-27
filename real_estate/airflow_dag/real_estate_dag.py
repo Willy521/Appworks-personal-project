@@ -1,5 +1,9 @@
-# house_real_price
-
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+import requests
+import zipfile
+import time
 import pymysql
 from decouple import config
 from dotenv import load_dotenv
@@ -7,16 +11,128 @@ import os
 import boto3
 import csv
 import pandas as pd
-from utilities.utils import connect_to_db
+
+
+S3_BUCKET = os.getenv('S3_BUCKET', 'appworks.personal.project')
+MAIN_FOLDER = 'real_estate_price'
+
+
+def get_real_estate_url(year, season):  # which year, season
+    # 調整
+    if year > 1000:
+        year -= 1911
+    url = "https://plvr.land.moi.gov.tw//DownloadSeason?season=" + str(year) + "S" + str(
+        season) + "&type=zip&fileName=lvr_landcsv.zip"
+    return url
+
+
+def get_price_information(url, year, season):
+    print("Now is: ", year, season)
+    print(url)
+    res = requests.get(url)
+    print("Status Code:", res.status_code)  # 看有沒有response
+    print("Content Length:", len(res.content))  # 看長度多少
+
+    # 代表還沒有數據直接return
+    if res.status_code != 200 or len(res.content) < 5000:
+        print(f"No data available for {year} Season {season}. Stopping.")
+        return
+    # 有數據就創建新目錄
+    else:
+        fname = str(year) + str(season) + '.zip'
+        main_folder = 'real_estate_price'
+        sub_folder = f"{main_folder}/unzipped_{year}_{season}"
+        # 確認有數據後創建目錄
+        if not os.path.isdir(main_folder):
+            os.mkdir(main_folder)
+        if not os.path.isdir(sub_folder):
+            os.mkdir(sub_folder)
+
+        # 解壓縮
+        zip_path = os.path.join(main_folder, fname)
+        with open(zip_path, 'wb') as file:
+            file.write(res.content)
+        # 上傳 zip 文件到 S3
+        upload_to_s3(zip_path, S3_BUCKET, object_name=f"{MAIN_FOLDER}/{fname}")
+
+        # 解壓縮 zip 文件並將解壓縮的檔案也上傳到 S3
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                print("Extracting files...")
+                zip_ref.extractall(sub_folder)
+                for file_info in zip_ref.infolist():
+                    extracted_file_path = os.path.join(sub_folder, file_info.filename)
+                    print(f"Processing {extracted_file_path}...")
+
+                    # S3 中保持相同的目錄結構
+                    s3_object_name = f"{sub_folder}/{file_info.filename}"
+                    print(f"Uploading {extracted_file_path} to S3 as {s3_object_name}...")
+                    success = upload_to_s3(extracted_file_path, S3_BUCKET, object_name=s3_object_name)
+                    if not success:
+                        print(f"Failed to upload {extracted_file_path} to S3.")
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+
+
+def upload_to_s3(file_name, bucket, object_name=None):
+    if object_name is None:
+        object_name = file_name
+
+    s3 = boto3.client('s3')
+    try:
+        s3.upload_file(file_name, bucket, object_name)
+    except Exception as e:
+        print("S3 Upload Error:", e)
+        return False
+    return True
+
+
+def transform_local_file_name(file_name):
+    if 'unzipped_' in file_name:
+        parts = file_name.split('_')
+        year = int(parts[1]) + 1911
+        return f"{MAIN_FOLDER}/unzipped_{year}_{parts[2]}"
+    return file_name
+
+
+def list_existing_files_local(folder):
+    if os.path.exists(folder):  # 檢查文件夾是否存在
+        file_names = os.listdir(folder)  # 獲取文件夾中所有文件和子文件夾的名稱
+        transformed_names = set(transform_local_file_name(name) for name in file_names if name.startswith('unzipped_'))  # 轉換名稱並過濾
+        return transformed_names  # 返回轉換後的名稱集合
+    else:
+        return set()  # 如果文件夾不存在，返回一個空集合
+
+
+# 連接RDS DB
+def connect_to_db():
+    password = config('DATABASE_PASSWORD')
+
+    # 如果try 這條路徑出現異常，就會跳到except
+    try:
+        conn = pymysql.connect(
+            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
+            port=3306,
+            user='admin',
+            password=password,
+            database='estate_data_hub',
+            charset='utf8mb4'
+        )
+        print("Have connected to MySQL")
+        return conn
+    except Exception as e:  # 抓取所有異常，e是異常的對象
+        print(f"Failed to connect to MySQL: {e}")
+        return None  # 返回None，代表連接失敗
 
 
 def download_file_from_s3(bucket_name, object_key):
     s3 = boto3.client('s3')
 
-    # replace "real_estate_price/" from object_key as file name
+    # 將 "real_estate_price/" 從 object_key 中移除，並使用其餘部分作為文件名
     local_file_name = object_key.replace('real_estate_price/', '')
     local_file_path = os.path.join('real_estate_price', local_file_name)
 
+    # 確保目錄存在
     if not os.path.exists(os.path.dirname(local_file_path)):
         os.makedirs(os.path.dirname(local_file_path))
 
@@ -31,13 +147,18 @@ def download_file_from_s3(bucket_name, object_key):
 
 def read_csv(file_name):
     with open(file_name, mode='r', encoding='utf-8') as file:
+        # 創建一個csv reader
         csv_reader = csv.reader(file)
+        # 遍歷CSV文件的每一行
         for row in csv_reader:
-            print(row)
+            print(row)  # 打印當前內容
 
 
 def read_csv_pandas(file_name):
+    # pandas read CSV文件
     data = pd.read_csv(file_name)
+
+    # 顯示前幾行數據
     print(data.head())
 
 
@@ -159,7 +280,41 @@ def insert_data_from_csv(conn, file_name):
         print(f"{file_name} Error inserting data: {e}")
 
 
-# get latest file
+def crawl_real_estate():
+    load_dotenv()  # S3環境變數
+
+    # 計算本地應該要有哪些檔案
+    current_year = int(time.strftime('%Y'))
+    current_season = (int(time.strftime('%m')) - 1) // 3 + 1
+
+    expected_files = set()
+    for year in range(current_year, 2019, -1):  #
+        for season in range(1, 5):  # 4 seasons in a year
+            if year == current_year and season > current_season:
+                continue
+            expected_files.add(f"{MAIN_FOLDER}/unzipped_{year}_{season}")
+
+    # 檢查本地缺少什麼檔案
+    existing_files_local = list_existing_files_local(MAIN_FOLDER)
+    print('本地應該有檔案: ', expected_files)
+    print('本地已經有檔案: ', existing_files_local)
+
+    # 計算並輸出缺少的檔案
+    missing_files = expected_files - existing_files_local
+    print('missing_files: ', missing_files)
+
+    # 為缺少的檔案製作url和下載和解壓縮數據
+    for missing_file in missing_files:
+        # 從文件名解析年和季度
+        parts = missing_file.split('_')
+        year = int(parts[-2])  # 從最後一個下划線前取值，獲取年份
+        year -= 1911
+        season = int(parts[-1])  # 從最後一個下划線後取值，獲取季度
+        url = get_real_estate_url(year, season)  # 已轉成要下載的url
+        # print(url)
+        get_price_information(url, year, season)
+
+
 def get_latest_files(bucket_name, cities_prefix, year_start=112):
     s3 = boto3.client('s3')
     current_year = year_start
@@ -180,7 +335,7 @@ def get_latest_files(bucket_name, cities_prefix, year_start=112):
     return object_keys
 
 
-def main():
+def process_real_estate_data():
     load_dotenv()  # 載入環境變數
 
     # 定義S3的桶名，對象key和要保存的文件名
@@ -211,5 +366,35 @@ def main():
     conn.close()
 
 
-if __name__ == "__main__":
-    main()
+# 定義DAG和其默認參數
+default_args = {
+    'owner': 'Willy',
+    'depends_on_past': False,  # 若上一次失敗 這一次還會執行
+    'email_on_failure': True,  # 若失敗會發送email給我
+    'email_on_retry': True,  # 若設定為 True，當任務重試時將會發送郵件。
+    'retries': 1,  # 若任務失敗，會嘗試重跑的次數。
+    'retry_delay': timedelta(minutes=5),  # 重試之間的時間間隔
+}
+
+dag = DAG(
+    'real_estate_pipeline',  # DAG 的唯一識別碼
+    default_args=default_args,  # 上面定義的默認參數
+    description='A pipeline for real estate price and processing the data.',  # DAG 的描述
+    schedule_interval=timedelta(days=1),  # DAG的執行間隔。這裡設定為每天一次
+    start_date=datetime(2023, 10, 14),  # DAG 的開始日期
+    catchup=False  # 若為 True，則當 DAG 啟動時，將會執行從 start_date 到當前日期之間的所有排程。若為 False，則只會執行最新的排程。
+)
+
+t1 = PythonOperator(
+    task_id='real_estate_upload_to_S3',
+    python_callable=crawl_real_estate,
+    dag=dag,  # 指定該任務屬於哪個 DAG。
+)
+
+t2 = PythonOperator(
+    task_id='process_real_estate_data',
+    python_callable=process_real_estate_data,
+    dag=dag,
+)
+
+t1 >> t2
