@@ -15,22 +15,19 @@ def create_url(start_time, last_date_queried):
     updated_url = f"{api_base_url}&startTime={start_time}&endTime={last_date_queried}"
     return updated_url
 
-
-# 上傳到S3
 def upload_file_to_s3(file_name, bucket):
     s3 = boto3.client('s3')
     try:
-        s3.upload_file(file_name, bucket, file_name)  # 本地的文件路徑跟S3設為一樣
+        s3.upload_file(file_name, bucket, file_name)
         return True
     except Exception as e:
         print(f"An error occurred: {e}")
         return False
 
-# 連接RDS DB
+
 def connect_to_db():
     password = config('DATABASE_PASSWORD')
 
-    # 如果try 這條路徑出現異常，就會跳到except
     try:
         conn = pymysql.connect(
             host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
@@ -42,9 +39,9 @@ def connect_to_db():
         )
         print("Have connected to MySQL")
         return conn
-    except Exception as e:  # 抓取所有異常，e是異常的對象
+    except Exception as e:
         print(f"Failed to connect to MySQL: {e}")
-        return None  # 返回None，代表連接失敗
+        return None
 
 
 def download_file_from_s3(bucket_name, object_key, file_name):
@@ -60,9 +57,8 @@ def download_file_from_s3(bucket_name, object_key, file_name):
 
 
 def crawl_gdp():
-    load_dotenv()  # S3環境變數
+    load_dotenv()
 
-    # 求得當前季度
     month = datetime.now().month
     year = datetime.now().year
     if month <= 3:
@@ -73,7 +69,6 @@ def crawl_gdp():
         current_quarter = f"{year}-Q3"
     else:
         current_quarter = f"{year}-Q4"
-    # 發送GET請求
     response = requests.get(create_url('2000-Q1', current_quarter))
 
     if response.status_code == 200:
@@ -81,20 +76,19 @@ def crawl_gdp():
             data = json.loads(response.text)
 
             print('API Response:')
-            print(json.dumps(data, indent=4, ensure_ascii=False))  # Pretty print the output
+            print(json.dumps(data, indent=4, ensure_ascii=False))
 
-            # Save as JSON file
-            # 在本地創建一個資料夾，將JSON file 存入資料夾並上傳到S3
+
+
             directory = "crawl_to_s3_file"
             if not os.path.exists(directory):
                 os.makedirs(directory)
-            json_file_path = "crawl_to_s3_file/gdp_data.json"  # 存到S3的crawl_to_s3資料夾
-
+            json_file_path = "crawl_to_s3_file/gdp_data.json"
             with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
 
             # Upload to S3
-            bucket_name = 'appworks.personal.project'  # Replace with your bucket name
+            bucket_name = 'appworks.personal.project'
             if upload_file_to_s3(json_file_path, bucket_name):
                 print("JSON file successfully uploaded to S3.")
             else:
@@ -110,10 +104,10 @@ def crawl_gdp():
 
 def process_gdp():
     load_dotenv()
-    # 定義S3的桶名，對象key和要保存的文件名
+
     bucket_name = 'appworks.personal.project'
-    object_key = 'crawl_to_s3_file/gdp_data.json'  # S3文件的名字
-    file_name = 'download_from_s3_file/gdp_data.json'  # 本地保存的文件名
+    object_key = 'crawl_to_s3_file/gdp_data.json'
+    file_name = 'download_from_s3_file/gdp_data.json'
 
     # S3 download
     download_file_from_s3(bucket_name, object_key, file_name)
@@ -228,29 +222,28 @@ def process_gdp():
         conn.close()
 
 
-# 定義DAG和其默認參數
 default_args = {
     'owner': 'Willy',
-    'depends_on_past': False,  # 若上一次失敗 這一次還會執行
-    'email_on_failure': True,  # 若失敗會發送email給我
-    'email_on_retry': True,  # 若設定為 True，當任務重試時將會發送郵件。
-    'retries': 1,  # 若任務失敗，會嘗試重跑的次數。
-    'retry_delay': timedelta(minutes=5),  # 重試之間的時間間隔
+    'depends_on_past': False,
+    'email_on_failure': True,
+    'email_on_retry': True,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
 }
 
 dag = DAG(
-    'gdp_pipeline',  # DAG 的唯一識別碼
-    default_args=default_args,  # 上面定義的默認參數
-    description='A pipeline for crawling gdp and processing the data.',  # DAG 的描述
-    schedule_interval=timedelta(days=1),  # DAG的執行間隔。這裡設定為每天一次
-    start_date=datetime(2023, 10, 13),  # DAG 的開始日期
-    catchup=False  # 若為 True，則當 DAG 啟動時，將會執行從 start_date 到當前日期之間的所有排程。若為 False，則只會執行最新的排程。
+    'gdp_pipeline',
+    default_args=default_args,
+    description='A pipeline for crawling gdp and processing the data.',
+    schedule_interval=timedelta(days=1),
+    start_date=datetime(2023, 10, 13),
+    catchup=False
 )
 
 t1 = PythonOperator(
     task_id='gdp_upload_to_S3',
     python_callable=crawl_gdp,
-    dag=dag,  # 指定該任務屬於哪個 DAG。
+    dag=dag,
 )
 
 t2 = PythonOperator(
