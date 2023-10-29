@@ -29,7 +29,7 @@ Cloud:
 * AWS CloudWatch
 
 Others:
-* Github actions/CICD
+* Github Actions/CICD
 * Docker
 * Nginx
 * Airflow
@@ -38,13 +38,21 @@ Others:
 
 ## Features
 1. Real-Time Tracking of Key Factors in Housing Prices
-f
-![My Animation](./readme_files/螢幕錄影%202023-10-27%20下午5.30.09.gif)
 
+https://github.com/Willy521/Appworks-personal-project/assets/48906493/ef8d3f02-8080-4029-9e71-c30be56d7901
 
 2. News Sentiment Analysis
 
 https://github.com/Willy521/Appworks-personal-project/assets/48906493/c8b746a5-6203-4525-bf80-6ea2ca0d7c03
+
+
+3. Regional Transaction Hotspot Analysis
+
+https://github.com/Willy521/Appworks-personal-project/assets/48906493/9e9b51c0-802b-4011-9c2d-63d733113fdb
+
+4. Analysis of Factors Affecting House Prices
+
+https://github.com/Willy521/Appworks-personal-project/assets/48906493/0246c94c-33a5-4f21-9b6d-df053bc79176
 
 
 ## Author
