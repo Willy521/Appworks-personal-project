@@ -32,7 +32,6 @@ def get_price_information(url, year, season):
     print("Status Code:", res.status_code)
     print("Content Length:", len(res.content))
 
-
     if res.status_code != 200 or len(res.content) < 5000:
         print(f"No data available for {year} Season {season}. Stopping.")
         return
@@ -98,24 +97,29 @@ def list_existing_files_local(folder):
         return set()
 
 
-
+# connect to db
 def connect_to_db():
+    host = config('HOST')
+    port = int(config('PORT'))
+    user = config('USER')
+    database = config('DATABASE')
     password = config('DATABASE_PASSWORD')
-
     try:
         conn = pymysql.connect(
-            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-            port=3306,
+            host=host,
+            port=port,
             user='admin',
             password=password,
-            database='estate_data_hub',
+            database=database,
             charset='utf8mb4'
+            # connection_timeout=57600
         )
-        print("Have connected to MySQL")
+        print("Have connected to db")
         return conn
     except Exception as e:
-        print(f"Failed to connect to MySQL: {e}")
+        print(f"error: {e}")
         return None
+
 
 
 def download_file_from_s3(bucket_name, object_key):
@@ -282,10 +286,8 @@ def crawl_real_estate():
     print('本地應該有檔案: ', expected_files)
     print('本地已經有檔案: ', existing_files_local)
 
-
     missing_files = expected_files - existing_files_local
     print('missing_files: ', missing_files)
-
 
     for missing_file in missing_files:
         parts = missing_file.split('_')
@@ -346,8 +348,10 @@ def process_real_estate_data():
 default_args = {
     'owner': 'Willy',
     'depends_on_past': False,
+    'email': ['r94040119@gmail.com'],
     'email_on_failure': True,
     'email_on_retry': True,
+    'email_on_success': True,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
