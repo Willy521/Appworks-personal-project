@@ -24,23 +24,29 @@ def upload_file_to_s3(file_name, bucket):
         return False
 
 
+# connect to db
 def connect_to_db():
+    host = config('HOST')
+    port = int(config('PORT'))
+    user = config('USER')
+    database = config('DATABASE')
     password = config('DATABASE_PASSWORD')
-
     try:
         conn = pymysql.connect(
-            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-            port=3306,
+            host=host,
+            port=port,
             user='admin',
             password=password,
-            database='estate_data_hub',
+            database=database,
             charset='utf8mb4'
+            # connection_timeout=57600
         )
-        print("Have connected to MySQL")
+        print("Have connected to db")
         return conn
     except Exception as e:
-        print(f"Failed to connect to MySQL: {e}")
-    return None
+        print(f"error: {e}")
+        return None
+
 
 
 # api 金鑰
@@ -220,8 +226,10 @@ def process_anue_data():
 default_args = {
     'owner': 'Willy',
     'depends_on_past': False,
+    'email': ['r94040119@gmail.com'],
     'email_on_failure': True,
     'email_on_retry': True,
+    'email_on_success': True,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
