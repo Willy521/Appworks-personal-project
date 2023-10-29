@@ -24,7 +24,7 @@ def call_chagpt(prompt):
 
 
 def store_anue_news(news_data):
-    conn = connect_to_db()
+    conn = connect_to_db('anue_news')
     if not conn:
         print("Failed to establish a database connection.")
         return
@@ -83,7 +83,7 @@ def get_keywords_from_anue_news(news_data):
 
 
 def store_keywords(ten_key_words):
-    conn = connect_to_db()
+    conn = connect_to_db('keywords_table')
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
