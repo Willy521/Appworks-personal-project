@@ -37,9 +37,14 @@ Others:
 
 
 ## Features
-1. Real-time tracking of key factors in housing prices.
-
+1. Real-Time Tracking of Key Factors in Housing Prices
+f
 ![My Animation](./readme_files/螢幕錄影%202023-10-27%20下午5.30.09.gif)
+
+
+2. News Sentiment Analysis
+
+https://github.com/Willy521/Appworks-personal-project/assets/48906493/c8b746a5-6203-4525-bf80-6ea2ca0d7c03
 
 
 ## Author
