@@ -18,7 +18,6 @@ MAIN_FOLDER = 'real_estate_price'
 
 
 def get_real_estate_url(year, season):  # which year, season
-    # 調整
     if year > 1000:
         year -= 1911
     url = "https://plvr.land.moi.gov.tw//DownloadSeason?season=" + str(year) + "S" + str(
@@ -30,32 +29,28 @@ def get_price_information(url, year, season):
     print("Now is: ", year, season)
     print(url)
     res = requests.get(url)
-    print("Status Code:", res.status_code)  # 看有沒有response
-    print("Content Length:", len(res.content))  # 看長度多少
+    print("Status Code:", res.status_code)
+    print("Content Length:", len(res.content))
 
-    # 代表還沒有數據直接return
+
     if res.status_code != 200 or len(res.content) < 5000:
         print(f"No data available for {year} Season {season}. Stopping.")
         return
-    # 有數據就創建新目錄
     else:
         fname = str(year) + str(season) + '.zip'
         main_folder = 'real_estate_price'
         sub_folder = f"{main_folder}/unzipped_{year}_{season}"
-        # 確認有數據後創建目錄
         if not os.path.isdir(main_folder):
             os.mkdir(main_folder)
         if not os.path.isdir(sub_folder):
             os.mkdir(sub_folder)
 
-        # 解壓縮
         zip_path = os.path.join(main_folder, fname)
         with open(zip_path, 'wb') as file:
             file.write(res.content)
-        # 上傳 zip 文件到 S3
+
         upload_to_s3(zip_path, S3_BUCKET, object_name=f"{MAIN_FOLDER}/{fname}")
 
-        # 解壓縮 zip 文件並將解壓縮的檔案也上傳到 S3
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 print("Extracting files...")
@@ -64,7 +59,6 @@ def get_price_information(url, year, season):
                     extracted_file_path = os.path.join(sub_folder, file_info.filename)
                     print(f"Processing {extracted_file_path}...")
 
-                    # S3 中保持相同的目錄結構
                     s3_object_name = f"{sub_folder}/{file_info.filename}"
                     print(f"Uploading {extracted_file_path} to S3 as {s3_object_name}...")
                     success = upload_to_s3(extracted_file_path, S3_BUCKET, object_name=s3_object_name)
@@ -96,19 +90,18 @@ def transform_local_file_name(file_name):
 
 
 def list_existing_files_local(folder):
-    if os.path.exists(folder):  # 檢查文件夾是否存在
-        file_names = os.listdir(folder)  # 獲取文件夾中所有文件和子文件夾的名稱
-        transformed_names = set(transform_local_file_name(name) for name in file_names if name.startswith('unzipped_'))  # 轉換名稱並過濾
-        return transformed_names  # 返回轉換後的名稱集合
+    if os.path.exists(folder):
+        file_names = os.listdir(folder)
+        transformed_names = set(transform_local_file_name(name) for name in file_names if name.startswith('unzipped_'))
+        return transformed_names
     else:
-        return set()  # 如果文件夾不存在，返回一個空集合
+        return set()
 
 
-# 連接RDS DB
+
 def connect_to_db():
     password = config('DATABASE_PASSWORD')
 
-    # 如果try 這條路徑出現異常，就會跳到except
     try:
         conn = pymysql.connect(
             host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
@@ -120,19 +113,17 @@ def connect_to_db():
         )
         print("Have connected to MySQL")
         return conn
-    except Exception as e:  # 抓取所有異常，e是異常的對象
+    except Exception as e:
         print(f"Failed to connect to MySQL: {e}")
-        return None  # 返回None，代表連接失敗
+        return None
 
 
 def download_file_from_s3(bucket_name, object_key):
     s3 = boto3.client('s3')
 
-    # 將 "real_estate_price/" 從 object_key 中移除，並使用其餘部分作為文件名
     local_file_name = object_key.replace('real_estate_price/', '')
     local_file_path = os.path.join('real_estate_price', local_file_name)
 
-    # 確保目錄存在
     if not os.path.exists(os.path.dirname(local_file_path)):
         os.makedirs(os.path.dirname(local_file_path))
 
@@ -147,18 +138,14 @@ def download_file_from_s3(bucket_name, object_key):
 
 def read_csv(file_name):
     with open(file_name, mode='r', encoding='utf-8') as file:
-        # 創建一個csv reader
         csv_reader = csv.reader(file)
-        # 遍歷CSV文件的每一行
         for row in csv_reader:
-            print(row)  # 打印當前內容
+            print(row)
 
 
 def read_csv_pandas(file_name):
-    # pandas read CSV文件
     data = pd.read_csv(file_name)
 
-    # 顯示前幾行數據
     print(data.head())
 
 
@@ -214,13 +201,12 @@ def insert_data_from_csv(conn, file_name):
         # Replace NaN values with empty string or some other value
         data = data.fillna("NAN")
 
-        data = data.drop(data.index[0], axis=0)  # 刪除第一行 標題
+        data = data.drop(data.index[0], axis=0)
 
-        # 檢查文件名中是否包含"112_3"（代表第3季），如果是則刪除最後一個column
         print("Processing file: ", file_name)
         if "112_3" in file_name:
             print(data.head())
-            data = data.drop(data.columns[-1], axis=1)  # 刪除最後一個column
+            data = data.drop(data.columns[-1], axis=1)
             print(data.head())
 
         with conn.cursor() as cursor:
@@ -268,7 +254,6 @@ def insert_data_from_csv(conn, file_name):
             buildings_and_number=VALUES(buildings_and_number)
             """
 
-            # 將pandas dataframe的每一行轉化為tuple
             data_to_insert = [tuple(row) for index, row in data.iterrows()]
 
             # Use executemany to insert all data at once
@@ -281,9 +266,8 @@ def insert_data_from_csv(conn, file_name):
 
 
 def crawl_real_estate():
-    load_dotenv()  # S3環境變數
+    load_dotenv()
 
-    # 計算本地應該要有哪些檔案
     current_year = int(time.strftime('%Y'))
     current_season = (int(time.strftime('%m')) - 1) // 3 + 1
 
@@ -294,24 +278,22 @@ def crawl_real_estate():
                 continue
             expected_files.add(f"{MAIN_FOLDER}/unzipped_{year}_{season}")
 
-    # 檢查本地缺少什麼檔案
     existing_files_local = list_existing_files_local(MAIN_FOLDER)
     print('本地應該有檔案: ', expected_files)
     print('本地已經有檔案: ', existing_files_local)
 
-    # 計算並輸出缺少的檔案
+
     missing_files = expected_files - existing_files_local
     print('missing_files: ', missing_files)
 
-    # 為缺少的檔案製作url和下載和解壓縮數據
+
     for missing_file in missing_files:
-        # 從文件名解析年和季度
         parts = missing_file.split('_')
-        year = int(parts[-2])  # 從最後一個下划線前取值，獲取年份
+        year = int(parts[-2])
         year -= 1911
-        season = int(parts[-1])  # 從最後一個下划線後取值，獲取季度
-        url = get_real_estate_url(year, season)  # 已轉成要下載的url
-        # print(url)
+        season = int(parts[-1])
+        url = get_real_estate_url(year, season)
+
         get_price_information(url, year, season)
 
 
@@ -330,23 +312,18 @@ def get_latest_files(bucket_name, cities_prefix, year_start=112):
                 object_keys.append(potential_file)
                 season += 1
             except:
-                # If we can't find the file, break the loop for this city
                 break
     return object_keys
 
 
 def process_real_estate_data():
-    load_dotenv()  # 載入環境變數
+    load_dotenv()
 
-    # 定義S3的桶名，對象key和要保存的文件名
     bucket_name = 'appworks.personal.project'
-    # file_name = 'real_estate_price/last_download.csv'  # 下載後在本地保存的文件
 
-    # 如果沒有就先創資料夾在本地
     if not os.path.exists("real_estate_price"):
         os.makedirs("real_estate_price")
 
-    # 抓六都資料
     cities_prefix = ['h', 'e', 'd', 'b', 'a', 'f', 'o', 'j']
     object_keys = get_latest_files(bucket_name, cities_prefix)
 
@@ -361,34 +338,33 @@ def process_real_estate_data():
         # S3 download
         downloaded_file_path = download_file_from_s3(bucket_name, object_key)
         if downloaded_file_path:
-            # 如果文件下載成功，插入到DB
             insert_data_from_csv(conn, downloaded_file_path)
     conn.close()
 
 
-# 定義DAG和其默認參數
+
 default_args = {
     'owner': 'Willy',
-    'depends_on_past': False,  # 若上一次失敗 這一次還會執行
-    'email_on_failure': True,  # 若失敗會發送email給我
-    'email_on_retry': True,  # 若設定為 True，當任務重試時將會發送郵件。
-    'retries': 1,  # 若任務失敗，會嘗試重跑的次數。
-    'retry_delay': timedelta(minutes=5),  # 重試之間的時間間隔
+    'depends_on_past': False,
+    'email_on_failure': True,
+    'email_on_retry': True,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
 }
 
 dag = DAG(
-    'real_estate_pipeline',  # DAG 的唯一識別碼
-    default_args=default_args,  # 上面定義的默認參數
-    description='A pipeline for real estate price and processing the data.',  # DAG 的描述
-    schedule_interval=timedelta(days=1),  # DAG的執行間隔。這裡設定為每天一次
-    start_date=datetime(2023, 10, 14),  # DAG 的開始日期
-    catchup=False  # 若為 True，則當 DAG 啟動時，將會執行從 start_date 到當前日期之間的所有排程。若為 False，則只會執行最新的排程。
+    'real_estate_pipeline',
+    default_args=default_args,
+    description='A pipeline for real estate price and processing the data.',
+    schedule_interval=timedelta(days=1),
+    start_date=datetime(2023, 10, 14),
+    catchup=False
 )
 
 t1 = PythonOperator(
     task_id='real_estate_upload_to_S3',
     python_callable=crawl_real_estate,
-    dag=dag,  # 指定該任務屬於哪個 DAG。
+    dag=dag,
 )
 
 t2 = PythonOperator(
