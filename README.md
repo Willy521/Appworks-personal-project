@@ -14,17 +14,17 @@ Website url: https://www.estatedatahub.info
 Extract:
 
 * Web crawling from various websites using requests and Beautiful Soup. 
-    * Sources: 國泰建設、中華民國統計資訊網、鉅亨網新聞、內政部實價登錄、好房網
+    * Sources: 國泰建設、中華民國統計資訊網、鉅亨網新聞、內政部實價登錄、好房網。
 * Backing up the crawled data to AWS S3.
 
 Transform: 
 
-* Retrieving the backup files from AWS S3.
-* Using Python for data cleaning and preprocessing.
+* Retrieve the backup files from AWS S3.
+* Use Python for data cleaning and preprocessing.
 
 Load: 
 
-* Loading the processed data into AWS RDS.
+* Load the processed data into AWS RDS.
 
 ## Technologies
 
