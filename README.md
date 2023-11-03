@@ -6,8 +6,7 @@ Website url: https://www.estatedatahub.info
 [comment]: <> (![Estate Data Hub]&#40;https://img.onl/1bqVe&#41;)
 
 ## Architecture
-![架構圖](https://img.onl/T6ECAf)
-
+<img width="1390" alt="截圖 2023-11-03 下午4 25 47" src="https://github.com/Willy521/Appworks-personal-project/assets/48906493/d4078f4b-1b50-444c-8a76-d75c7afd83d3">
 
 ## Data Pipeline
 

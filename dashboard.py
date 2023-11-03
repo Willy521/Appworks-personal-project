@@ -32,28 +32,6 @@ font = fm.FontProperties(fname=font_path)
 # dashboard daily update
 st_autorefresh(interval=24 * 60 * 60 * 1000, key="dailyrefresh")  # daily update the dashboard
 
-
-# connect to db
-# connect_to_db()
-
-def connect_db():
-    try:
-        conn = pymysql.connect(
-            host='appworks.cwjujjrb7yo0.ap-southeast-2.rds.amazonaws.com',
-            port=3306,
-            user='admin',
-            password=password_bytes,
-            database='estate_data_hub',
-            charset='utf8mb4'
-            # connection_timeout=57600
-        )
-        print("Have connected to db")
-        return conn
-    except Exception as e:
-        print(f"error: {e}")
-        return None
-
-
 # sidebar
 with st.sidebar:
     st.title('Estate Data Hub')
@@ -83,8 +61,7 @@ if add_radio == "全台整體房市交易狀況":
     st.header('房價關鍵因子即時追蹤')
     col1, col2, col3, col4 = st.columns(4)
 
-    # 營造工程指數、景氣信號、全台戶量
-    # 民國轉西元 "89年7月" 轉成 "2000年7月"
+    # "89年7月" to "2000年7月"
     def fix_year_month(date_str):
         year, month = date_str.split('年', 1)
         year = int(year)
@@ -92,10 +69,11 @@ if add_radio == "全台整體房市交易狀況":
             year += 1911
         return f"{year}年{month}"
 
-    # 抓time 欄位是 "89年7月" 變成dataframe格式
+    # "89年7月" to dataframe
     @st.cache_data
     def fetch_data(table_name, column_names, data_name, time_format='%Y年%m月'):
-        conn = connect_db()
+        # conn = connect_db()
+        conn = connect_to_db("")
         try:
             with conn.cursor() as cursor:
                 sql = f"SELECT time_name, {data_name} FROM {table_name}"
@@ -121,17 +99,17 @@ if add_radio == "全台整體房市交易狀況":
             growth_rate = 0
         return latest_data, growth_rate, df
 
-    # 五大利率table
-    # 五大利率 time 格式: 民國轉西元 "89/7" 轉成 "2000-7"
+    # "五大利率"table
     def fix_year_month_dash(date_str):
         year, month = date_str.split('/')
-        year = int(year) + 1911  # 轉換民國年份到西元年份
+        year = int(year) + 1911
         return f"{year}-{month}"
 
-    # 抓五大利率時間是 083/07 (dash來區分)
+    # ”五大利率“ time format is 083/07
     @st.cache_data
     def fetch_data_rates(table_name, column_names, data_name, time_format='%Y年第%m月'):
-        conn = connect_db()
+        # conn = connect_db()
+        conn = connect_to_db("五大利率")
         try:
             with conn.cursor() as cursor:
                 sql = f"SELECT period, {data_name} FROM {table_name}"
@@ -144,7 +122,6 @@ if add_radio == "全台整體房市交易狀況":
         df = pd.DataFrame(rows, columns=['period', data_name])
         df = df[df[data_name] != 0]
 
-        # 根據所使用的日期格式轉換 period
         df['period'] = df['period'].apply(fix_year_month_dash)
         df['period'] = pd.to_datetime(df['period'], format=time_format)
         df = df[df['period'] >= pd.to_datetime('now') - pd.DateOffset(years=5)]
@@ -159,7 +136,7 @@ if add_radio == "全台整體房市交易狀況":
         return latest_data, growth_rate, df
 
 
-    # 營造工程指數
+    # ”營造工程指數“
     latest_data, growth_rate, df1 = fetch_data('economic_construction_cost', ['time_name', 'construction_index'],
                                                'construction_index', time_format='%Y年%m月')
     # st.table(df1)
@@ -171,7 +148,7 @@ if add_radio == "全台整體房市交易狀況":
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
 
-    # 景氣燈號
+    # ”景氣燈號“
     latest_data, growth_rate, df2 = fetch_data('economic_cycle_indicator', ['time_name', 'strategy_signal'],
                                                'strategy_signal', time_format='%Y年%m月')
     with col2:
@@ -183,7 +160,7 @@ if add_radio == "全台整體房市交易狀況":
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
 
-    # 全台戶量(人/戶)
+    # ”全台戶量(人/戶)“
     latest_data, growth_rate, df3 = fetch_data('society_population_data', ['time_name', 'average_household_size'],
                                                'average_household_size', time_format='%Y年%m月')
     with col3:
@@ -194,7 +171,7 @@ if add_radio == "全台整體房市交易狀況":
         fig.patch.set_facecolor('#0f1116')
         st.pyplot(fig)
 
-    # 利率
+    # ”利率“
     latest_data, growth_rate, df4 = fetch_data_rates('mortgage_interest_rates', ['period', 'rate'], 'rate',
                                                      time_format='%Y-%m')
     # st.table(df4)
@@ -214,21 +191,15 @@ if add_radio == "全台整體房市交易狀況":
 - 觀點四：從長期來看，利率與房地產存在強烈的正相關性。然而，即使最近央行實行了多次升息，與歷史相比，利率仍然維持在2-3%的低位。
         """)
 
-
     st.header('全國房屋指數(國泰房價指數)')
-    # 函數將民國轉換為西元
     def convert_to_ad(period):
-        # 從 period 中提取年份 (前三個字符) 並轉換為整數
         year = int(period[:3])
-        # 轉換年份
         ad_year = year + 1911
-        # 返回新格式
         return str(ad_year) + '-' + period[3:]
 
-
-    # 連接數據庫並選取所有數據
     try:
-        conn = connect_db()
+        # conn = connect_db()
+        conn = connect_to_db("國泰指數")
         with conn.cursor() as cursor:
             sql = "SELECT * FROM house_cathay_index"
             cursor.execute(sql)
@@ -236,17 +207,13 @@ if add_radio == "全台整體房市交易狀況":
 
         df = pd.DataFrame(result, columns=['id', 'period', 'city', 'index_value'])
 
-        # 在讀取到的 DataFrame 上應用轉換函數
         df['period'] = df['period'].apply(convert_to_ad)
 
-        # 畫分區圖
         cities = df['city'].unique().tolist()
         selected_cities = st.multiselect('選擇城市', cities, default=cities)
 
         if selected_cities:
             df_filtered = df[df['city'].isin(selected_cities)]
-
-            # 讓使用者選擇時間範圍
             periods = sorted(df['period'].unique().tolist())
             start_period, end_period = st.select_slider(
                 '選擇時間範圍',
@@ -270,8 +237,6 @@ if add_radio == "全台整體房市交易狀況":
         else:
             st.warning("請至少選擇一個城市。")
 
-        # 使用 st.expander 來添加一個可展開和折疊的區塊。
-        # 用另一個 expander 來提供額外的解釋或資訊。
         with st.expander("這些圖表的意義為何？"):
             st.write("""
                 國泰房價指數為國泰建設與政治大學台灣房地產研究中心、不動產界學者合作編製，於每季發布研究成果(目前更新至112年第2季度)，主要是針對「預售及新屋物件」，為國內房地產主要參考指標之一。
@@ -280,18 +245,18 @@ if add_radio == "全台整體房市交易狀況":
     except Exception as e:
         st.error(f"錯誤: {e}")
 
-    # 近三季量能排行
+    # three quarter comparison
     def parse_date(transaction_date_str):
         year = int(transaction_date_str[:3]) + 1911
         month = int(transaction_date_str[3:5])
         day = int(transaction_date_str[5:])
         return f"{year}-{month:02d}-{day:02d}"
 
-
     st.header('近四個月六都量能分析')
 
     try:
-        conn = connect_db()
+        # conn = connect_db()
+        conn = connect_to_db("六都量能分析")
         with conn.cursor() as cursor:
             sql = """
             SELECT city, transaction_date, COUNT(*) as transaction_count
@@ -362,12 +327,13 @@ if add_radio == "全台整體房市交易狀況":
 
     st.header('輿情分析')
     try:
-        conn = connect_db()
+        # conn = connect_db()
+        conn = connect_to_db("輿情分析")
         with conn.cursor() as cursor:
             # sql = "SELECT keyword FROM keywords_table WHERE id=22"
             sql = "SELECT keyword FROM keywords_table ORDER BY id DESC LIMIT 1"
             cursor.execute(sql)
-            result = cursor.fetchone()  # 获取单个查询结果
+            result = cursor.fetchone()
             keyword_string = result[0] if result else ""
 
     except Exception as e:
@@ -382,19 +348,16 @@ if add_radio == "全台整體房市交易狀況":
     else:
         keyword_list = []
 
-    # 生成文字雲
-    wordcloud = WordCloud(font_path='./PingFang.ttc',  # 指定中文字体的路径 ./real_estate/PingFang.ttc
+    wordcloud = WordCloud(font_path='./PingFang.ttc',
                           width=800, height=400, background_color='#0f1116').generate(' '.join(keyword_list))
 
-    print(keyword_list)  # 查看keywords列表是否为空
-    print(wordcloud)  # 查看wordcloud对象
+    print(keyword_list)
+    print(wordcloud)
 
-    # 画图
     plt.figure(figsize=(10, 5))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis("off")
 
-    # 在Streamlit中显示
     st.pyplot(plt)
     with st.expander("這些圖表的意義為何？"):
         st.write("""
@@ -407,10 +370,10 @@ elif add_radio == "區域交易熱點分析":
     def compute_hash(data):
         return hashlib.sha256(str(data).encode()).hexdigest()
 
-    # 定義一個函數來將數據保存到快取中
     @st.cache_data
     def load_data(selected_city):
-        conn = connect_db()
+        # conn = connect_db()
+        conn = connect_to_db("交易熱點")
         if conn:
             try:
                 with conn.cursor() as cursor:
@@ -422,15 +385,13 @@ elif add_radio == "區域交易熱點分析":
                 st.error(f"Error while fetching data: {e}")
 
 
-    # 篩選城市
     cities = ['臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '臺中市', '臺南市', '高雄市']
     selected_city = st.selectbox('條件篩選欄', cities)
     st.subheader(f'{selected_city} 預售屋實價登錄')
 
-    # 從快取中加載數據
+    # cach data
     data = load_data(selected_city)
 
-    # 將 交易年月日 轉換為西元年
     def convert_to_ad(date_str):
         try:
             year, month, day = int(date_str[:3]), int(date_str[3:5]), int(date_str[5:])
@@ -439,14 +400,13 @@ elif add_radio == "區域交易熱點分析":
             return None
 
 
-    # Convert the data to a pandas DataFrame 可以自定義欄位名稱
+    # Convert the data to a pandas DataFrame
     df = pd.DataFrame(data,
                       columns=['城市', '鄉鎮市區', '交易標的', '土地位置建物門牌', '建案名稱', '棟及號', '交易年月日', '總價元', '單價元平方公尺',
                                '車位類別', '土地移轉總面積平方公尺', '都市土地使用分區', '交易筆棟數', '移轉層次', '總樓層數', '建物型態', '主要用途',
                                '主要建材', '建物移轉總面積平方公尺', '建物現況格局-房', '建物現況格局-廳', '建物現況格局-衛', '建物現況格局-隔間',
                                '有無管理組織', '車位移轉總面積平方公尺', '車位總價元', '備註', '編號', ])
 
-    # 將 交易年月日 轉換為西元日期
     df['交易年月日'] = df['交易年月日'].apply(convert_to_ad)
     df.dropna(subset=['交易年月日'], inplace=True)
     df['交易年月日'] = pd.to_datetime(df['交易年月日'])
@@ -459,7 +419,7 @@ elif add_radio == "區域交易熱點分析":
     filtered_df = df[(df['交易年月日'] >= start_date) & (df['交易年月日'] <= end_date)]
     st.write(filtered_df)
 
-    # 成交量柱狀圖
+    # vlomun chart
     filtered_df.set_index('交易年月日', inplace=True)
     df_resampled = filtered_df.resample('D').size().reset_index()
     df_resampled.columns = ['交易年月日', '成交量']
@@ -478,12 +438,11 @@ elif add_radio == "區域交易熱點分析":
 
     st.plotly_chart(fig)
 
-    # 分區折線圖
-    filtered_df['鄉鎮市區'].fillna('未知', inplace=True)  # 鄉鎮區有nan值
+    # area chart
+    filtered_df['鄉鎮市區'].fillna('未知', inplace=True)
     unique_areas = filtered_df['鄉鎮市區'].unique()
     selected_areas = st.multiselect('選擇鄉鎮市區', options=unique_areas.tolist(), default=unique_areas.tolist())
 
-    # 使用保留的 '日期' 列來創建折線圖的 DataFrame
     line_chart_df = filtered_df.groupby(['交易年月日', '鄉鎮市區']).size().reset_index(name='交易量')
     line_chart_df = line_chart_df.pivot(index='交易年月日', columns='鄉鎮市區', values='交易量').fillna(0)
 
@@ -492,41 +451,33 @@ elif add_radio == "區域交易熱點分析":
               '#8c564b', '#c49c94', '#e377c2', '#f7b6d2', '#7f7f7f',
               '#c7c7c7', '#bcbd22', '#dbdb8d', '#17becf', '#9edae5']
 
-    # 使用plotly繪製折線圖
+    # plotly line chart
     fig = px.line(line_chart_df, x=line_chart_df.index, y=selected_areas, color_discrete_sequence=colors)
 
-    # 客製化圖形
     fig.update_layout(
         height=500,
         width=1200,
         xaxis_title="時間",
         yaxis_title="成交戶",
-        plot_bgcolor='#0f1116',  # 背景色
-        paper_bgcolor='#0f1116',  # 畫布背景色
-        font=dict(color='white')  # 文字顏色
+        plot_bgcolor='#0f1116',
+        paper_bgcolor='#0f1116',
+        font=dict(color='white')
     )
-
-    # 在streamlit上顯示圖形
     st.plotly_chart(fig)
 
-    # 圓餅圖表示各個建案的交易次數佔比
-    # 基於所選的城市，提供區域的下拉式選單
     districts = df['鄉鎮市區'].unique()
     selected_district = st.selectbox(f'選擇 {selected_city} 的區域', options=districts.tolist())
     st.subheader(f'{selected_city} {selected_district} 建案銷售佔比')
 
-    # 根據選定的城市和區域進行篩選
     district_filtered_df = filtered_df[filtered_df['鄉鎮市區'] == selected_district]
     pie_df = district_filtered_df.groupby('建案名稱').size().reset_index(name='交易次數')
     pie_df = pie_df.sort_values('交易次數', ascending=False)
 
-    # 找出小於2%的建案並合併成"其他"
     threshold = 0.01
     total_transactions = pie_df['交易次數'].sum()
     pie_df['建案名稱'] = pie_df.apply(lambda row: row['建案名稱'] if row['交易次數'] / total_transactions >= threshold else '其他',
                                   axis=1)
 
-    # 合併相同建案名稱的行，計算交易次數總和
     pie_df = pie_df.groupby('建案名稱').sum().reset_index()
 
     pie_fig = px.pie(pie_df, values='交易次數', names='建案名稱')
@@ -534,12 +485,10 @@ elif add_radio == "區域交易熱點分析":
     pie_fig.update_layout(
         height=600,
         width=1200,
-        font=dict(color='white'),  # 文字顏色
-        plot_bgcolor='#0f1116',  # 背景色
-        paper_bgcolor='#0f1116',  # 畫布背景色
+        font=dict(color='white'),
+        plot_bgcolor='#0f1116',
+        paper_bgcolor='#0f1116',
     )
-
-    # 在streamlit上顯示圓餅圖
     st.plotly_chart(pie_fig)
 
 
