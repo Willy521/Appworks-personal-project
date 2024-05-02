@@ -1,7 +1,7 @@
 # Estate Data Hub
 A Data Hub that give insights into the real estate market through visual charts. I gather a wide range of data, including news articles and potential factors affecting housing prices, and conduct correlation analyses.
 
-Website url: https://www.estatedatahub.info
+
 
 [comment]: <> (![Estate Data Hub]&#40;https://img.onl/1bqVe&#41;)
 
